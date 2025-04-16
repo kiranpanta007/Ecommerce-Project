@@ -32,11 +32,11 @@ $stmt->fetch();
     <h2 style="text-align: center; color: #333333; margin-bottom: 20px;">Welcome, <?php echo htmlspecialchars($name); ?>!</h2>
     
     <!-- Feedback Messages -->
-    <?php if (isset($_SESSION['success'])): ?>
+    <!-- <?php if (isset($_SESSION['success'])): ?>
         <p style="color: green; text-align: center; margin-bottom: 20px;">
             <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
         </p>
-    <?php endif; ?>
+    <?php endif; ?> -->
     
     <?php if (isset($_SESSION['error'])): ?>
         <p style="color: red; text-align: center; margin-bottom: 20px;">

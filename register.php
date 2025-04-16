@@ -6,39 +6,56 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $name = trim($_POST['name']);
     $email = trim($_POST['email']);
     $password = trim($_POST['password']);
+    $confirm_password = trim($_POST['confirm_password']);
 
     // Server-side validation
-    if (empty($name) || empty($email) || empty($password)) {
+    if (empty($name) || empty($email) || empty($password) || empty($confirm_password)) {
         $_SESSION['error'] = "All fields are required!";
         header("Location: register.php");
         exit();
     }
 
+    // Username validation (only letters, numbers, underscores, min 3 chars)
+    if (!preg_match("/^[a-zA-Z0-9_]{3,}$/", $name)) {
+        $_SESSION['error'] = "Username must be at least 3 characters and contain only letters, numbers, and underscores.";
+        header("Location: register.php");
+        exit();
+    }
+
+    // Check if username already exists
+    $stmt = $conn->prepare("SELECT id FROM users WHERE name = ?");
+    $stmt->bind_param("s", $name);
+    $stmt->execute();
+    $stmt->store_result();
+
+    if ($stmt->num_rows > 0) {
+        $_SESSION['error'] = "Username already taken!";
+        header("Location: register.php");
+        exit();
+    }
+
+    // Email format
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $_SESSION['error'] = "Invalid email format!";
         header("Location: register.php");
         exit();
     }
 
+    // Password length
     if (strlen($password) < 8) {
-        $_SESSION['error'] = "Password must be at least 6 characters!";
+        $_SESSION['error'] = "Password must be at least 8 characters!";
         header("Location: register.php");
         exit();
     }
 
-    // Check if email already exists
-    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $stmt->store_result();
-
-    if ($stmt->num_rows > 0) {
-        $_SESSION['error'] = "Email already exists!";
+    // Password match
+    if ($password !== $confirm_password) {
+        $_SESSION['error'] = "Passwords do not match!";
         header("Location: register.php");
         exit();
     }
 
-    // Hash password and insert user
+    // Hash and save
     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
     $stmt = $conn->prepare("INSERT INTO users (name, email, password) VALUES (?, ?, ?)");
     $stmt->bind_param("sss", $name, $email, $hashed_password);
@@ -80,74 +97,74 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             unset($_SESSION['success']);
         }
         ?>
-    <form action="register.php" method="POST" style="max-width: 400px; margin: auto;">
-    <input type="text" name="name" placeholder="Full Name" required
-           style="width: 100%; padding: 10px; margin-bottom: 15px; box-sizing: border-box;">
+
+        <form action="register.php" method="POST" style="max-width: 400px; margin: auto;">
+            <!-- Username Field -->
+            <input type="text" name="name" id="name" placeholder="Username" required minlength="3"
+                   pattern="^[a-zA-Z0-9_]{3,}$"
+                   title="Username must be at least 3 characters and contain only letters, numbers, and underscores."
+                   style="width: 100%; padding: 10px; margin-bottom: 15px; box-sizing: border-box;">
            
-    <input type="email" name="email" placeholder="Email" required
-           style="width: 100%; padding: 10px; margin-bottom: 15px; box-sizing: border-box;">
+            <!-- Email Field -->
+            <input type="email" name="email" placeholder="Email" required
+                   style="width: 100%; padding: 10px; margin-bottom: 15px; box-sizing: border-box;">
 
-    <!-- Password Field -->
-    <div style="position: relative; width: 100%; margin-bottom: 15px;">
-        <input type="password" name="password" placeholder="Password" required minlength="8"
-               title="Password must be at least 8 characters." id="password"
-               style="width: 100%; padding: 10px 40px 10px 10px; box-sizing: border-box;">
-        <i id="eye-icon" class="fa fa-eye" onclick="togglePasswordVisibility()"
-           style="position: absolute; top: 50%; right: 10px; transform: translateY(-50%); cursor: pointer; color: #333; font-size: 18px;"></i>
-    </div>
+            <!-- Password Field -->
+            <div style="position: relative; width: 100%; margin-bottom: 15px;">
+                <input type="password" name="password" placeholder="Password" required minlength="8"
+                       title="Password must be at least 8 characters." id="password"
+                       style="width: 100%; padding: 10px 40px 10px 10px; box-sizing: border-box;">
+                <i id="eye-icon" class="fa fa-eye" onclick="togglePasswordVisibility()"
+                   style="position: absolute; top: 50%; right: 10px; transform: translateY(-50%); cursor: pointer; color: #333; font-size: 18px;"></i>
+            </div>
 
-    <!-- Confirm Password Field -->
-    <div style="position: relative; width: 100%; margin-bottom: 15px;">
-        <input type="password" name="confirm_password" placeholder="Confirm Password" required minlength="8"
-               title="Password must be at least 8 characters." id="confirm-password"
-               style="width: 100%; padding: 10px 40px 10px 10px; box-sizing: border-box;">
-        <i id="confirm-eye-icon" class="fa fa-eye" onclick="toggleConfirmPasswordVisibility()"
-           style="position: absolute; top: 50%; right: 10px; transform: translateY(-50%); cursor: pointer; color: #333; font-size: 18px;"></i>
-    </div>
+            <!-- Confirm Password Field -->
+            <div style="position: relative; width: 100%; margin-bottom: 15px;">
+                <input type="password" name="confirm_password" placeholder="Confirm Password" required minlength="8"
+                       title="Password must be at least 8 characters." id="confirm-password"
+                       style="width: 100%; padding: 10px 40px 10px 10px; box-sizing: border-box;">
+                <i id="confirm-eye-icon" class="fa fa-eye" onclick="toggleConfirmPasswordVisibility()"
+                   style="position: absolute; top: 50%; right: 10px; transform: translateY(-50%); cursor: pointer; color: #333; font-size: 18px;"></i>
+            </div>
 
-    <button type="submit" style="width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; cursor: pointer;">
-        Register
-    </button>
-</form>
-
-
+            <button type="submit" style="width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; cursor: pointer;">
+                Register
+            </button>
+        </form>
     </div>
 
     <?php include 'includes/footer.php'; ?>
 
-
     <script>
-function togglePasswordVisibility() {
-    const passwordInput = document.getElementById('password');
-    const eyeIcon = document.getElementById('eye-icon');
+    function togglePasswordVisibility() {
+        const passwordInput = document.getElementById('password');
+        const eyeIcon = document.getElementById('eye-icon');
 
-    if (passwordInput.type === "password") {
-        passwordInput.type = "text";
-        eyeIcon.classList.remove("fa-eye");
-        eyeIcon.classList.add("fa-eye-slash");
-    } else {
-        passwordInput.type = "password";
-        eyeIcon.classList.remove("fa-eye-slash");
-        eyeIcon.classList.add("fa-eye");
+        if (passwordInput.type === "password") {
+            passwordInput.type = "text";
+            eyeIcon.classList.remove("fa-eye");
+            eyeIcon.classList.add("fa-eye-slash");
+        } else {
+            passwordInput.type = "password";
+            eyeIcon.classList.remove("fa-eye-slash");
+            eyeIcon.classList.add("fa-eye");
+        }
     }
-}
 
-function toggleConfirmPasswordVisibility() {
-    const confirmPasswordInput = document.getElementById('confirm-password');
-    const confirmEyeIcon = document.getElementById('confirm-eye-icon');
+    function toggleConfirmPasswordVisibility() {
+        const confirmPasswordInput = document.getElementById('confirm-password');
+        const confirmEyeIcon = document.getElementById('confirm-eye-icon');
 
-    if (confirmPasswordInput.type === "password") {
-        confirmPasswordInput.type = "text";
-        confirmEyeIcon.classList.remove("fa-eye");
-        confirmEyeIcon.classList.add("fa-eye-slash");
-    } else {
-        confirmPasswordInput.type = "password";
-        confirmEyeIcon.classList.remove("fa-eye-slash");
-        confirmEyeIcon.classList.add("fa-eye");
+        if (confirmPasswordInput.type === "password") {
+            confirmPasswordInput.type = "text";
+            confirmEyeIcon.classList.remove("fa-eye");
+            confirmEyeIcon.classList.add("fa-eye-slash");
+        } else {
+            confirmPasswordInput.type = "password";
+            confirmEyeIcon.classList.remove("fa-eye-slash");
+            confirmEyeIcon.classList.add("fa-eye");
+        }
     }
-}
-</script>
-
-
+    </script>
 </body>
 </html>

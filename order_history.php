@@ -22,7 +22,8 @@ $result = $stmt->get_result();
 include 'includes/header.php';
 ?>
 
-<div style="max-width: 800px; margin: 30px auto; font-family: Arial, sans-serif;">
+<!-- Page Container with full screen height minus header/footer -->
+<div style="min-height: calc(100vh - 160px); padding: 30px 20px; box-sizing: border-box; max-width: 800px; margin: auto; font-family: Arial, sans-serif;">
     <h2 style="text-align: center;">Your Order History</h2>
 
     <?php if ($result->num_rows > 0): ?>
@@ -39,11 +40,11 @@ include 'includes/header.php';
                                            JOIN products ON order_items.product_id = products.id 
                                            WHERE transaction_id = ?");
                 $itemsStmt->bind_param("s", $transaction['transaction_id']);
-                
+
                 if (!$itemsStmt->execute()) {
                     die("Item query error: " . $itemsStmt->error);
                 }
-                
+
                 $itemsResult = $itemsStmt->get_result();
                 ?>
 
@@ -75,7 +76,9 @@ include 'includes/header.php';
             </div>
         <?php endwhile; ?>
     <?php else: ?>
-        <p style="text-align: center;">You haven't placed any orders yet.</p>
+        <p style="text-align: center; font-size: 18px; color: #666; margin-top: 50px;">
+            You haven't placed any orders yet.
+        </p>
     <?php endif; ?>
 </div>
 
