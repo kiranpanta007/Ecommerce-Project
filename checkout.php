@@ -1,50 +1,43 @@
 <?php
 session_start();
 include 'includes/db.php';
+ob_start(); // Prevent "headers already sent"
 
-// Make sure no content is output before the header function
-ob_start(); // This will buffer the output to prevent "headers already sent" error
-
-// Include the header
+// Include header
 include 'includes/header.php';
 
-// Check if user is logged in
+// Check user login
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
-// Check if cart is empty
+// Empty cart check
 if (empty($_SESSION['cart'])) {
-    echo "<p>Your cart is empty. <a href='index.php'>Go shopping</a></p>";
+    echo "<p style='text-align: center; padding: 50px;'>Your cart is empty. <a href='index.php'>Go shopping</a></p>";
     include 'includes/footer.php';
     exit;
 }
 
-// Ensure user email is set in session
+// Check if email is set
 if (empty($_SESSION['user_email'])) {
-    die("Error: User email is not set. Please log in again.");
+    die("Error: User email not set. Please login again.");
 }
 
-// Calculate total amount and prepare checkout items
+// Initialize totals and order items
 $total_amount = 0;
 $checkout_items = [];
 
 foreach ($_SESSION['cart'] as $product_id => $quantity) {
-    $query = "SELECT * FROM products WHERE id = ?";
-    $stmt = $conn->prepare($query);
+    $stmt = $conn->prepare("SELECT * FROM products WHERE id = ?");
     $stmt->bind_param("i", $product_id);
-    
-    if (!$stmt->execute()) {
-        die("Database query error: " . $stmt->error);
-    }
-    
+    $stmt->execute();
     $result = $stmt->get_result();
 
     if ($result->num_rows > 0) {
         $product = $result->fetch_assoc();
         $price = (float) $product['price'];
-        $subtotal = $price * (int) $quantity;
+        $subtotal = $price * (int)$quantity;
         $total_amount += $subtotal;
 
         $checkout_items[] = [
@@ -55,139 +48,105 @@ foreach ($_SESSION['cart'] as $product_id => $quantity) {
             'subtotal' => $subtotal,
             'image' => $product['image']
         ];
-    } else {
-        echo "<p>Product with ID $product_id not found. <a href='index.php'>Go back to shopping</a></p>";
-        include 'includes/footer.php';
-        exit;
     }
 }
 
 $total_amount_formatted = number_format($total_amount, 2, '.', '');
 
-// Check if a coupon is applied
+// Handle coupon
 if (isset($_SESSION['coupon'])) {
     $coupon = $_SESSION['coupon'];
     $coupon_discount = $_SESSION['coupon_discount'];
     $coupon_type = $_SESSION['coupon_type'];
 
-    // Apply the coupon discount
-    if ($coupon_type == 'percentage') {
-        // Percentage discount
-        $discount = ($total_amount * $coupon_discount) / 100;
-    } else {
-        // Fixed amount discount
-        $discount = $coupon_discount;
-    }
+    $discount = ($coupon_type == 'percentage')
+        ? ($total_amount * $coupon_discount) / 100
+        : $coupon_discount;
 
-    // Adjust the total amount
     $total_amount -= $discount;
     $total_amount_formatted = number_format($total_amount, 2, '.', '');
 
-    // Show coupon applied message
-    echo "<p style='color: green;'>Coupon Applied: " . htmlspecialchars($coupon['code']) . " - Discount: -NPR " . number_format($discount, 2) . "</p>";
+    echo "<p style='color: green; text-align:center;'>Coupon Applied: " . htmlspecialchars($coupon['code']) . " - Discount: NPR " . number_format($discount, 2) . "</p>";
 }
 
 // Generate transaction UUID
 $transaction_uuid = uniqid('txn_');
 
-// eSewa credentials (Sandbox for testing)
+// eSewa credentials (Sandbox)
 $product_code = 'EPAYTEST';
-$secret_key = '8gBm/:&EnhH.1/q'; // Sandbox secret key
+$secret_key = '8gBm/:&EnhH.1/q';
 
-// Create signature payload and generate signature
 $payload = "total_amount=$total_amount_formatted,transaction_uuid=$transaction_uuid,product_code=$product_code";
 $signature = base64_encode(hash_hmac('sha256', $payload, $secret_key, true));
 
-// Insert transaction into the database
+// Save transaction
 $stmt = $conn->prepare("INSERT INTO transactions (user_id, amount, transaction_id, status, email) VALUES (?, ?, ?, 'pending', ?)");
 $stmt->bind_param("idss", $_SESSION['user_id'], $total_amount_formatted, $transaction_uuid, $_SESSION['user_email']);
-
-if (!$stmt->execute()) {
-    die("Error inserting transaction: " . $stmt->error);
-}
+$stmt->execute();
 $stmt->close();
 
-// Insert the order into the `orders` table
+// Save order
 $order_stmt = $conn->prepare("INSERT INTO orders (user_id, total_price, payment_method, status, order_date, transaction_uuid) VALUES (?, ?, ?, 'Pending', NOW(), ?)");
 $order_stmt->bind_param("idss", $_SESSION['user_id'], $total_amount_formatted, $product_code, $transaction_uuid);
-
-if (!$order_stmt->execute()) {
-    die("Error inserting order: " . $order_stmt->error);
-}
-
-// Get the newly inserted order_id
+$order_stmt->execute();
 $order_id = $order_stmt->insert_id;
 $order_stmt->close();
 
-// Insert order items into `order_items`
-$orderItemStmt = $conn->prepare("INSERT INTO order_items (transaction_id, product_id, quantity, price, subtotal) VALUES (?, ?, ?, ?, ?)");
+// Save items
+$item_stmt = $conn->prepare("INSERT INTO order_items (transaction_id, product_id, quantity, price, subtotal) VALUES (?, ?, ?, ?, ?)");
 foreach ($checkout_items as $item) {
-    $orderItemStmt->bind_param(
-        "siiid",
-        $transaction_uuid,
-        $item['id'],
-        $item['quantity'],
-        $item['price'],
-        $item['subtotal']
-    );
-
-    if (!$orderItemStmt->execute()) {
-        die("Error inserting order items: " . $orderItemStmt->error);
-    }
+    $item_stmt->bind_param("siiid", $transaction_uuid, $item['id'], $item['quantity'], $item['price'], $item['subtotal']);
+    $item_stmt->execute();
 }
-$orderItemStmt->close();
+$item_stmt->close();
 
-// Clear cart after successful checkout
+// Clear cart
 unset($_SESSION['cart']);
-
-// Store order_id in session to ensure it's passed properly
 $_SESSION['order_id'] = $order_id;
 ?>
 
-<div class="checkout-container" style="max-width: 1200px; margin: 20px auto; padding: 30px; background: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);">
-    <h2 style="text-align: center; color: #333; font-size: 24px; margin-bottom: 20px;">Checkout Summary</h2>
+<!-- Checkout Summary -->
+<div style="max-width: 1200px; margin: 30px auto; padding: 30px; background: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); font-family: Arial;">
+    <h2 style="text-align: center; margin-bottom: 30px;">Checkout Summary</h2>
 
-    <!-- Coupon Code Form -->
+    <!-- Coupon Form -->
     <form method="POST" action="apply_coupon.php" style="text-align: center; margin-bottom: 20px;">
-        <label for="coupon_code" style="font-size: 16px; color: #555;">Coupon Code:</label>
-        <input type="text" name="coupon_code" id="coupon_code" placeholder="Enter coupon code" style="padding: 10px; font-size: 16px; margin-right: 10px; border: 1px solid #ddd; border-radius: 4px;">
-        <button type="submit" style="padding: 10px 20px; font-size: 16px; color: white; background-color: #28a745; border: none; border-radius: 4px; cursor: pointer;">Apply</button>
+        <input type="text" name="coupon_code" placeholder="Enter coupon code" style="padding: 10px; border-radius: 4px; border: 1px solid #ccc; width: 250px;">
+        <button type="submit" style="padding: 10px 20px; background: green; color: white; border: none; border-radius: 4px;">Apply</button>
     </form>
 
-    <!-- Display Cart Items -->
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background-color: #f9f9f9;">
-        <thead>
-            <tr style="background-color: #007bff; color: white; font-size: 16px;">
-                <th style="padding: 10px; text-align: center;">Image</th>
-                <th style="padding: 10px; text-align: left;">Name</th>
-                <th style="padding: 10px; text-align: center;">Price (NPR)</th>
-                <th style="padding: 10px; text-align: center;">Quantity</th>
-                <th style="padding: 10px; text-align: center;">Subtotal (NPR)</th>
+    <!-- Cart Items Table -->
+    <table style="width: 100%; border-collapse: collapse; background: #f9f9f9;">
+        <thead style="background: #007bff; color: white;">
+            <tr>
+                <th style="padding: 10px;">Image</th>
+                <th style="padding: 10px;">Name</th>
+                <th style="padding: 10px;">Price (NPR)</th>
+                <th style="padding: 10px;">Qty</th>
+                <th style="padding: 10px;">Subtotal (NPR)</th>
             </tr>
         </thead>
         <tbody>
             <?php foreach ($checkout_items as $item): ?>
-            <tr style="text-align: center; background-color: #fff;">
-                <td><img src="assets/images/<?= htmlspecialchars($item['image']) ?>" alt="<?= htmlspecialchars($item['name']) ?>" width="50" style="border-radius: 4px;"></td>
-                <td style="padding: 10px;"><?= htmlspecialchars($item['name']) ?></td>
-                <td style="padding: 10px;"><?= number_format($item['price'], 2) ?></td>
-                <td style="padding: 10px;"><?= (int) $item['quantity'] ?></td>
-                <td style="padding: 10px;"><?= number_format($item['subtotal'], 2) ?></td>
+            <tr style="text-align: center; background: white;">
+                <td><img src="assets/images/<?= htmlspecialchars($item['image']) ?>" alt="<?= htmlspecialchars($item['name']) ?>" width="50"></td>
+                <td><?= htmlspecialchars($item['name']) ?></td>
+                <td><?= number_format($item['price'], 2) ?></td>
+                <td><?= (int)$item['quantity'] ?></td>
+                <td><?= number_format($item['subtotal'], 2) ?></td>
             </tr>
             <?php endforeach; ?>
         </tbody>
-        <tfoot>
-            <tr style="font-weight: bold; background-color: #f1f1f1;">
+        <tfoot style="font-weight: bold; background: #f1f1f1;">
+            <tr>
                 <td colspan="4" style="text-align: right; padding: 10px;">Total:</td>
-                <td style="padding: 10px;"><?= number_format($total_amount_formatted, 2) ?></td>
+                <td style="padding: 10px;"><?= $total_amount_formatted ?></td>
             </tr>
         </tfoot>
     </table>
-    
-    <!-- Display Order ID -->
-    <div style="text-align: center; margin-bottom: 20px;">
-        <strong>Order ID: </strong> <?= $order_id ?>
-    </div>
+
+    <!-- Order ID -->
+    <div style="text-align: center; margin: 20px 0;"><strong>Order ID:</strong> <?= $order_id ?></div>
 
     <!-- eSewa Payment Form -->
     <form action="https://rc-epay.esewa.com.np/api/epay/main/v2/form" method="POST" style="text-align: center;">
@@ -203,14 +162,8 @@ $_SESSION['order_id'] = $order_id;
         <input type="hidden" name="failure_url" value="http://localhost/ecommerce-project/failure.php">
         <input type="hidden" name="signed_field_names" value="total_amount,transaction_uuid,product_code">
         <input type="hidden" name="signature" value="<?= htmlspecialchars($signature) ?>">
-        <button type="submit" style="padding: 12px 24px; font-size: 18px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Pay with eSewa</button>
+        <button type="submit" style="padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px;">Pay with eSewa</button>
     </form>
 </div>
 
-<?php
-// Include the footer
-include 'includes/footer.php';
-
-// Flush the output buffer to ensure no extra headers are sent
-ob_end_flush();
-?>
+<?php include 'includes/footer.php'; ob_end_flush(); ?>

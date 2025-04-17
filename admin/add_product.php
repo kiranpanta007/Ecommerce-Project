@@ -9,23 +9,20 @@ include '../includes/db.php';
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $name = trim($_POST['name']);
     $price = trim($_POST['price']);
+    $stock = isset($_POST['stock']) ? intval($_POST['stock']) : 0;
 
-    // Debugging: Check if the form data is received
-    echo "Name: $name<br>";
-    echo "Price: $price<br>";
+    // Price validation: Ensure price is greater than zero
+    if ($price <= 0) {
+        $_SESSION['error'] = "Price must be greater than zero.";
+        header("Location: add_product.php");
+        exit();
+    }
 
     // Handle file upload
     if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
-        echo "File uploaded successfully.<br>";
-
         $target_dir = "../uploads/";
         $target_file = $target_dir . basename($_FILES['image']['name']);
         $imageFileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
-
-        // Debugging: Check file details
-        echo "File Name: " . $_FILES['image']['name'] . "<br>";
-        echo "File Size: " . $_FILES['image']['size'] . " bytes<br>";
-        echo "File Type: " . $_FILES['image']['type'] . "<br>";
 
         // Check if the file is an image
         $check = getimagesize($_FILES['image']['tmp_name']);
@@ -51,7 +48,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         // Upload the file
         if (move_uploaded_file($_FILES['image']['tmp_name'], $target_file)) {
-            echo "File moved to: $target_file<br>";
             $image = basename($_FILES['image']['name']);
         } else {
             $_SESSION['error'] = "Failed to upload file.";
@@ -65,8 +61,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     // Insert product into the database
-    $stmt = $conn->prepare("INSERT INTO products (name, price, image) VALUES (?, ?, ?)");
-    $stmt->bind_param("sss", $name, $price, $image);
+    $stmt = $conn->prepare("INSERT INTO products (name, price, image, stock) VALUES (?, ?, ?, ?)");
+    $stmt->bind_param("sssi", $name, $price, $image, $stock);
 
     if ($stmt->execute()) {
         $_SESSION['success'] = "Product added successfully!";
@@ -85,7 +81,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Add Product</title>
     <style>
-    body {
+        /* Your existing styles */
+        body {
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
@@ -197,6 +194,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="form-group">
                 <label for="price">Price:</label>
                 <input type="number" id="price" name="price" placeholder="Enter price" step="0.01" required>
+            </div>
+            <div class="form-group">
+                <label for="stock">Stock Quantity:</label>
+                <input type="number" id="stock" name="stock" placeholder="Enter stock quantity" min="0" required>
             </div>
             <div class="form-group">
                 <label for="image">Product Image:</label>

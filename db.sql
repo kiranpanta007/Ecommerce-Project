@@ -201,6 +201,21 @@ INSERT INTO `users` (`id`, `username`, `email`, `password`, `created_at`) VALUES
 (3, 'kiran', 'kiran@gmail.com', '$2y$10$Tc6PJzfGp.6fBV0m2LbFgerl.P7ZNwJnAXRUu4/9MejvGGB93LoGa', '2025-03-10 15:17:48'),
 (4, 'myname', 'myname@gmail.com', '$2y$10$udan26vE4/1iNKTtkP8oSuWi0ToVOlhlj8EOy./E/WxHU/fCm8iG6', '2025-03-15 03:02:09');
 
+
+---Adding Brand Table
+CREATE TABLE brands (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+);
+
+
+-- Adding Brand id in the product Table
+ALTER TABLE products
+ADD COLUMN brand_id INT(11);
+
+-- Adding stock in the PRoduct Table
+ALTER TABLE products ADD stock INT NOT NULL DEFAULT 0;
+
 --
 -- Indexes for dumped tables
 --

@@ -138,6 +138,11 @@ if (!$product) {
                 <input type="text" id="image" name="image" value="<?= htmlspecialchars($product['image']); ?>">
             </div>
 
+            <div class="form-group">
+                <label for="stock">Stock Quantity:</label>
+                <input type="number" id="stock" name="stock" value="<?= htmlspecialchars($product['stock']); ?>" min="0" required>
+            </div>
+
             <button type="submit" class="submit-button">Update Product</button>
         </form>
     </main>
