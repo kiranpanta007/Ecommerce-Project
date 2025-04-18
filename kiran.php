@@ -6,12 +6,7 @@
     <title>Document</title>
 </head>
 <body>
-    <div class="container">
-        <li>git </li>
-        <li></li>
-        <li></li>
-        <li></li>
-    </div>
+       
     <script></script>
 </body>
 </html>
