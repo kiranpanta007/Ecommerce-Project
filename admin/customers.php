@@ -6,9 +6,9 @@ if (!isset($_SESSION['admin_id'])) {
 }
 include '../includes/db.php';
 
-// Fetch products
-$stmt = $conn->query("SELECT id, name, price, image FROM products");
-$products = $stmt->fetch_all(MYSQLI_ASSOC);
+// Fetch users
+$stmt = $conn->query("SELECT id, name, email, created_at FROM users ORDER BY created_at DESC");
+$users = $stmt->fetch_all(MYSQLI_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -16,7 +16,7 @@ $products = $stmt->fetch_all(MYSQLI_ASSOC);
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Manage Products | Admin Dashboard</title>
+    <title>Manage Customers | Admin Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -169,12 +169,6 @@ $products = $stmt->fetch_all(MYSQLI_ASSOC);
             font-size: 0.9375rem;
         }
 
-        .header-actions {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
         .user-avatar {
             width: 2.5rem;
             height: 2.5rem;
@@ -195,121 +189,96 @@ $products = $stmt->fetch_all(MYSQLI_ASSOC);
             box-shadow: 0 0 0 3px var(--primary-light);
         }
 
-        /* Page Title */
-        .page-title {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .page-title h2 {
-            font-size: 1.5rem;
-            color: var(--dark);
-        }
-
-        /* Buttons */
-        .btn {
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 0.625rem 1.125rem;
-            border-radius: 0.5rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: var(--transition);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            font-size: 0.875rem;
-            line-height: 1;
-        }
-
-        .btn:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.3);
-        }
-
-        /* Table */
-        .table-container {
+        /* Customers Container */
+        .customers-container {
             background: var(--card-bg);
             border-radius: 0.75rem;
             padding: 1.5rem;
             box-shadow: var(--card-shadow);
-            overflow-x: auto;
             border: 1px solid rgba(0, 0, 0, 0.03);
         }
 
-        table {
+        /* Search Filter */
+        .search-filter {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .search-filter input {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--gray-200);
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            width: 300px;
+            transition: var(--transition);
+        }
+
+        .search-filter input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        /* Customers Table */
+        .customers-table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 600px;
+            margin-top: 1.5rem;
         }
 
-        th, td {
-            padding: 0.75rem 1rem;
+        .customers-table th, 
+        .customers-table td {
+            padding: 1rem;
             text-align: left;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            border-bottom: 1px solid var(--gray-200);
         }
 
-        th {
-            font-weight: 600;
+        .customers-table th {
+            background-color: var(--gray-100);
             color: var(--gray-600);
             text-transform: uppercase;
             font-size: 0.75rem;
             letter-spacing: 0.5px;
-            background: rgba(0, 0, 0, 0.02);
+            font-weight: 600;
         }
 
-        tr:hover {
-            background: rgba(99, 102, 241, 0.03);
-        }
-
-        .product-image {
-            width: 60px;
-            height: 60px;
-            object-fit: cover;
-            border-radius: 0.25rem;
+        .customers-table tr:hover {
+            background-color: var(--gray-100);
         }
 
         /* Action Buttons */
         .action-btn {
             padding: 0.375rem 0.75rem;
-            border-radius: 4px;
+            border-radius: 0.375rem;
             font-size: 0.75rem;
-            margin-right: 0.5rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
             display: inline-flex;
             align-items: center;
-            transition: var(--transition);
+            gap: 0.25rem;
+            text-decoration: none;
         }
 
-        .action-btn i {
-            margin-right: 0.25rem;
-        }
-
-        .btn-edit {
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--success);
-            border: none;
-        }
-
-        .btn-edit:hover {
-            background: rgba(16, 185, 129, 0.2);
-        }
-
-        .btn-delete {
-            background: rgba(239, 68, 68, 0.1);
+        .delete-btn {
+            background-color: rgba(239, 68, 68, 0.1);
             color: var(--danger);
             border: none;
         }
 
-        .btn-delete:hover {
-            background: rgba(239, 68, 68, 0.2);
+        .delete-btn:hover {
+            background-color: rgba(239, 68, 68, 0.2);
         }
 
-        /* Responsive */
+        /* No Customers */
+        .no-customers {
+            text-align: center;
+            padding: 2rem;
+            color: var(--gray-500);
+        }
+
+        /* Mobile Responsive */
         @media (max-width: 992px) {
             .sidebar {
                 transform: translateX(-100%);
@@ -340,7 +309,7 @@ $products = $stmt->fetch_all(MYSQLI_ASSOC);
                     <span>Dashboard</span>
                 </a>
             </div>
-            <div class="nav-item active">
+            <div class="nav-item">
                 <a href="products.php" role="menuitem">
                     <i class="fas fa-box-open"></i>
                     <span>Products</span>
@@ -352,7 +321,7 @@ $products = $stmt->fetch_all(MYSQLI_ASSOC);
                     <span>Orders</span>
                 </a>
             </div>
-            <div class="nav-item">
+            <div class="nav-item active">
                 <a href="customers.php" role="menuitem">
                     <i class="fas fa-users"></i>
                     <span>Customers</span>
@@ -371,64 +340,54 @@ $products = $stmt->fetch_all(MYSQLI_ASSOC);
     <main class="main-content">
         <div class="header">
             <div class="page-title">
-                <h1>Product Management</h1>
+                <h1>Customer Management</h1>
+                <p>View and manage your store customers</p>
             </div>
-            <div class="header-actions">
+            <div class="user-avatar">
                 <?php
                 $initial = $_SESSION['admin_name'] ?? 'A';
                 $initial = htmlspecialchars($initial);
                 $initial = substr($initial, 0, 1);
-                $initial = strtoupper($initial);
+                echo strtoupper($initial);
                 ?>
-                <div class="user-avatar" id="userMenu" aria-haspopup="true" aria-expanded="false">
-                    <?php echo $initial; ?>
-                </div>
             </div>
         </div>
 
-        <div class="page-title">
-            <h2>Product List</h2>
-            <a href="add_product.php" class="btn">
-                <i class="fas fa-plus"></i> Add Product
-            </a>
-        </div>
+        <div class="customers-container">
+            <div class="search-filter">
+                <input type="text" id="search-input" placeholder="Search by name or email">
+            </div>
 
-        <div class="table-container">
-            <table>
+            <table class="customers-table">
                 <thead>
                     <tr>
-                        <th>ID</th>
-                        <th>Image</th>
+                        <th>User ID</th>
                         <th>Name</th>
-                        <th>Price</th>
+                        <th>Email</th>
+                        <th>Registered</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($products as $product): ?>
+                    <?php if (empty($users)): ?>
                         <tr>
-                            <td><?= htmlspecialchars($product['id']); ?></td>
+                            <td colspan="5" class="no-customers">No customers found</td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($users as $user): ?>
+                        <tr>
+                            <td>#<?= htmlspecialchars($user['id']) ?></td>
+                            <td><?= htmlspecialchars($user['name']) ?></td>
+                            <td><?= htmlspecialchars($user['email']) ?></td>
+                            <td><?= date('M d, Y', strtotime($user['created_at'])) ?></td>
                             <td>
-                                <?php if (!empty($product['image'])): ?>
-                                    <img src="../uploads/<?= htmlspecialchars($product['image']); ?>" alt="<?= htmlspecialchars($product['name']); ?>" class="product-image">
-                                <?php else: ?>
-                                    <div class="product-image" style="background: #eee; display: flex; align-items: center; justify-content: center;">
-                                        <i class="fas fa-image" style="color: #aaa;"></i>
-                                    </div>
-                                <?php endif; ?>
-                            </td>
-                            <td><?= htmlspecialchars($product['name']); ?></td>
-                            <td>NRS <?= number_format($product['price'], 2); ?></td>
-                            <td>
-                                <a href="edit_product.php?id=<?= $product['id']; ?>" class="action-btn btn-edit">
-                                    <i class="fas fa-edit"></i> Edit
-                                </a>
-                                <a href="delete_product.php?id=<?= $product['id']; ?>" class="action-btn btn-delete" onclick="return confirm('Are you sure you want to delete this product?');">
+                                <a href="delete_users.php?id=<?= $user['id'] ?>" class="action-btn delete-btn" onclick="return confirm('Are you sure you want to delete this customer?');">
                                     <i class="fas fa-trash"></i> Delete
                                 </a>
                             </td>
                         </tr>
-                    <?php endforeach; ?>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>
@@ -471,6 +430,25 @@ $products = $stmt->fetch_all(MYSQLI_ASSOC);
 
             window.addEventListener('resize', checkMobile);
             checkMobile();
+        });
+
+        // Live search functionality
+        document.getElementById('search-input').addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = document.querySelectorAll('.customers-table tbody tr');
+            
+            rows.forEach(row => {
+                if (row.classList.contains('no-customers')) return;
+                
+                const name = row.cells[1].textContent.toLowerCase();
+                const email = row.cells[2].textContent.toLowerCase();
+                
+                if (name.includes(searchTerm) || email.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
         });
     </script>
 </body>

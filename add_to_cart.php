@@ -1,27 +1,44 @@
 <?php
 session_start();
+require_once 'includes/db.php';
 
-// Check if product ID is provided
-if (isset($_POST['product_id'])) {
-    $product_id = intval($_POST['product_id']); // Sanitize the input
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $product_id = intval($_POST['product_id']);
+    $quantity = isset($_POST['quantity']) ? intval($_POST['quantity']) : 1;
 
-    // Initialize cart if it doesn't exist
-    if (!isset($_SESSION['cart'])) {
-        $_SESSION['cart'] = [];
+    // Fetch product details
+    $stmt = $conn->prepare("SELECT id, name, price FROM products WHERE id = ?");
+    $stmt->bind_param("i", $product_id);
+    $stmt->execute();
+    $product = $stmt->get_result()->fetch_assoc();
+
+    if ($product) {
+        // Initialize cart if not exists
+        if (!isset($_SESSION['cart'])) {
+            $_SESSION['cart'] = [];
+        }
+
+        // Add/update item in cart
+        if (isset($_SESSION['cart'][$product_id])) {
+            $_SESSION['cart'][$product_id]['quantity'] += $quantity;
+        } else {
+            $_SESSION['cart'][$product_id] = [
+                'id' => $product_id,
+                'name' => $product['name'],
+                'price' => $product['price'],
+                'quantity' => $quantity
+            ];
+        }
+
+        // Redirect back to product page with success
+        $_SESSION['success'] = "Product added to cart!";
+        header("Location: product.php?id=$product_id");
+        exit();
     }
-
-    // Add product to cart
-    if (isset($_SESSION['cart'][$product_id])) {
-        $_SESSION['cart'][$product_id] += 1; // Increment quantity if product already exists
-    } else {
-        $_SESSION['cart'][$product_id] = 1; // Add new product to cart
-    }
-
-    // Redirect back to the product page
-    header("Location: product.php?id=" . $product_id);
-    exit();
-} else {
-    // No product ID provided
-    die("Invalid product ID.");
 }
+
+// If something went wrong
+$_SESSION['error'] = "Failed to add product to cart";
+header("Location: shop.php"); // Or your shop page
+exit();
 ?>
