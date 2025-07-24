@@ -99,7 +99,7 @@ async function loadDashboard() {
                     yAxisID: 'y',
                 },
                 {
-                    label: 'Revenue ($)',
+                    label: 'Revenue (NRS)',
                     data: revenueData,
                     backgroundColor: 'rgba(255, 206, 86, 0.7)',
                     yAxisID: 'y1',
@@ -118,7 +118,7 @@ async function loadDashboard() {
                     beginAtZero: true,
                     position: 'right',
                     grid: { drawOnChartArea: false },
-                    title: { display: true, text: 'Revenue ($)' }
+                    title: { display: true, text: 'Revenue (NRS)' }
                 }
             }
         }

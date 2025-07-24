@@ -28,7 +28,11 @@ if (empty($_SESSION['user_email'])) {
 $total_amount = 0;
 $checkout_items = [];
 
-foreach ($_SESSION['cart'] as $product_id => $quantity) {
+// Stock validation & cart items preparation
+foreach ($_SESSION['cart'] as $product_id => $item) {
+    $quantity = (int)$item['quantity'];
+
+    // Fetch product details
     $stmt = $conn->prepare("SELECT * FROM products WHERE id = ?");
     $stmt->bind_param("i", $product_id);
     $stmt->execute();
@@ -36,8 +40,14 @@ foreach ($_SESSION['cart'] as $product_id => $quantity) {
 
     if ($result->num_rows > 0) {
         $product = $result->fetch_assoc();
-        $price = (float) $product['price'];
-        $subtotal = $price * (int)$quantity;
+
+        // Stock check
+        if ($product['stock'] < $quantity) {
+            die("Sorry, product '" . htmlspecialchars($product['name']) . "' has insufficient stock.");
+        }
+
+        $price = (float)$product['price'];
+        $subtotal = $price * $quantity;
         $total_amount += $subtotal;
 
         $checkout_items[] = [
@@ -48,6 +58,8 @@ foreach ($_SESSION['cart'] as $product_id => $quantity) {
             'subtotal' => $subtotal,
             'image' => $product['image']
         ];
+    } else {
+        die("Product with ID $product_id not found.");
     }
 }
 
@@ -76,6 +88,7 @@ $transaction_uuid = uniqid('txn_');
 $product_code = 'EPAYTEST';
 $secret_key = '8gBm/:&EnhH.1/q';
 
+// Prepare signature payload and signature
 $payload = "total_amount=$total_amount_formatted,transaction_uuid=$transaction_uuid,product_code=$product_code";
 $signature = base64_encode(hash_hmac('sha256', $payload, $secret_key, true));
 
@@ -92,13 +105,22 @@ $order_stmt->execute();
 $order_id = $order_stmt->insert_id;
 $order_stmt->close();
 
-// Save items
+// Save order items
 $item_stmt = $conn->prepare("INSERT INTO order_items (transaction_id, product_id, quantity, price, subtotal) VALUES (?, ?, ?, ?, ?)");
 foreach ($checkout_items as $item) {
     $item_stmt->bind_param("siiid", $transaction_uuid, $item['id'], $item['quantity'], $item['price'], $item['subtotal']);
     $item_stmt->execute();
 }
 $item_stmt->close();
+
+// Reduce stock after order is saved
+$reduceStmt = $conn->prepare("UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?");
+foreach ($_SESSION['cart'] as $product_id => $item) {
+    $qty = $item['quantity'];
+    $reduceStmt->bind_param("iii", $qty, $product_id, $qty);
+    $reduceStmt->execute();
+}
+$reduceStmt->close();
 
 // Clear cart
 unset($_SESSION['cart']);

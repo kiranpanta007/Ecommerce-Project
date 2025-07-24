@@ -42,10 +42,14 @@ function checkStockAvailability($productId, $requiredQuantity, $conn) {
     $stmt->execute();
     $result = $stmt->get_result();
     
-    if ($result->num_rows === 0) return false;
-    
-    $product = $result->fetch_assoc();
-    return $product['stock'] >= $requiredQuantity;
+    $available = false;
+    if ($result->num_rows > 0) {
+        $product = $result->fetch_assoc();
+        $available = $product['stock'] >= $requiredQuantity;
+    }
+
+    $stmt->close(); // recommended
+    return $available;
 }
 
 /**
