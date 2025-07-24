@@ -1,8 +1,8 @@
 <?php
 // Include database connection
-include 'includes/db.php';
+include_once 'includes/db.php';
 include 'includes/stock_functions.php'; // Include stock functions
-session_start();
+// session_start();
 
 // Check if product ID is provided in the URL
 if (isset($_GET['id'])) {

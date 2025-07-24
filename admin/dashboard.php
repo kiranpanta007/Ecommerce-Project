@@ -1,12 +1,161 @@
 <?php
-// dashboard.php
 session_start();
 
-// Security checks
-if (!isset($_SESSION['admin_logged_in'])) {
+// Output buffering for performance
+ob_start();
+
+// CSRF token generation (for forms)
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Redirect if not logged in
+if (!isset($_SESSION['admin_id'])) {
     header("Location: login.php");
     exit();
 }
+?>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>Admin Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 20px auto;
+        }
+        .stat {
+            margin-bottom: 15px;
+        }
+        .chart-container {
+            width: 100%;
+            max-width: 800px;
+            margin-bottom: 40px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Welcome, <?php echo htmlspecialchars($_SESSION['admin_name']); ?>!</h1>
+
+<div class="stat">Total Revenue: <b id="total_revenue">Loading...</b></div>
+<div class="stat">Total Orders: <b id="total_orders">Loading...</b></div>
+<div class="stat">New Customers (last 30 days): <b id="new_customers">Loading...</b></div>
+<div class="stat">Low Stock Products: <b id="inventory_alert">Loading...</b></div>
+
+<div class="chart-container">
+    <h3>Orders and Revenue Last 7 Days</h3>
+    <canvas id="salesChart"></canvas>
+</div>
+
+<div class="chart-container">
+    <h3>Order Status Distribution</h3>
+    <canvas id="statusChart"></canvas>
+</div>
+
+<div class="chart-container">
+    <h3>Revenue by Payment Method</h3>
+    <canvas id="paymentChart"></canvas>
+</div>
+
+<script>
+async function loadDashboard() {
+    const res = await fetch('dashboard_data.php');
+    const data = await res.json();
+
+    document.getElementById('total_revenue').textContent = 'NRS' + Number(data.total_revenue).toLocaleString();
+    document.getElementById('total_orders').textContent = data.total_orders;
+    document.getElementById('new_customers').textContent = data.new_customers;
+    document.getElementById('inventory_alert').textContent = data.inventory_alert;
+
+    const labels = [];
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        labels.push(d.toISOString().slice(0, 10));
+    }
+
+    const salesByDate = {};
+    data.sales_analytics.forEach(item => {
+        salesByDate[item.date] = item;
+    });
+
+    const ordersData = labels.map(date => salesByDate[date] ? salesByDate[date].orders_count : 0);
+    const revenueData = labels.map(date => salesByDate[date] ? salesByDate[date].revenue : 0);
+
+    new Chart(document.getElementById('salesChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Orders',
+                    data: ordersData,
+                    backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                    yAxisID: 'y',
+                },
+                {
+                    label: 'Revenue ($)',
+                    data: revenueData,
+                    backgroundColor: 'rgba(255, 206, 86, 0.7)',
+                    yAxisID: 'y1',
+                },
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    position: 'left',
+                    title: { display: true, text: 'Orders' }
+                },
+                y1: {
+                    beginAtZero: true,
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    title: { display: true, text: 'Revenue ($)' }
+                }
+            }
+        }
+    });
+
+    const statusLabels = Object.keys(data.order_status);
+    const statusCounts = Object.values(data.order_status);
+    new Chart(document.getElementById('statusChart').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: statusLabels,
+            datasets: [{
+                data: statusCounts,
+                backgroundColor: ['#4e79a7', '#f28e2c', '#e15759', '#76b7b2', '#59a14f']
+            }]
+        }
+    });
+
+    const paymentLabels = data.revenue_source.map(x => x.payment_method);
+    const paymentRevenue = data.revenue_source.map(x => x.revenue);
+    new Chart(document.getElementById('paymentChart').getContext('2d'), {
+        type: 'pie',
+        data: {
+            labels: paymentLabels,
+            datasets: [{
+                data: paymentRevenue,
+                backgroundColor: ['#e15759', '#4e79a7', '#f28e2c', '#76b7b2', '#59a14f']
+            }]
+        }
+    });
+}
+
+loadDashboard();
+</script>
+</body>
+</html>
+
 
 // CSRF protection
 if (empty($_SESSION['csrf_token'])) {
@@ -668,91 +817,6 @@ ob_start();
             </div>
         </nav>
     </aside>
-
-    <!-- Main Content -->
-    <main class="main-content">
-        <div class="header">
-            <div class="page-title">
-                <h1>Dashboard Overview</h1>
-                <p>Welcome back, <?php echo htmlspecialchars($_SESSION['admin_name'] ?? 'Admin', ENT_QUOTES, 'UTF-8'); ?></p>
-            </div>
-            <div class="header-actions">
-                <div class="date-display">
-                    <i class="far fa-calendar-alt"></i>
-                    <span id="current-date"><?php echo date('F j, Y'); ?></span>
-                </div>
-                <button id="refresh-btn" class="btn">
-                    <i class="fas fa-sync-alt"></i>
-                    <span>Refresh</span>
-                </button>
-                <?php
-$initial = $_SESSION['admin_name'] ?? 'A';
-$initial = htmlspecialchars($initial);
-$initial = substr($initial, 0, 1);
-$initial = strtoupper($initial);
-?>
-<div class="user-avatar" id="userMenu" aria-haspopup="true" aria-expanded="false">
-    <?php echo $initial; ?>
-</div>
-            </div>
-        </div>
-
-        <!-- Stats Cards -->
-        <div class="stats-grid" id="stats-grid">
-            <div class="stat-card animate-fade delay-1">
-                <h3><i class="fas fa-dollar-sign"></i> Total Revenue</h3>
-                <div class="value" id="total-revenue">$0</div>
-                <div class="change up">
-                    <i class="fas fa-arrow-up"></i> <span id="revenue-change">0%</span> from last month
-                </div>
-            </div>
-            <div class="stat-card success animate-fade delay-2">
-                <h3><i class="fas fa-shopping-bag"></i> Total Orders</h3>
-                <div class="value" id="total-orders">0</div>
-                <div class="change up">
-                    <i class="fas fa-arrow-up"></i> <span id="orders-change">0%</span> from yesterday
-                </div>
-            </div>
-            <div class="stat-card info animate-fade delay-3">
-                <h3><i class="fas fa-users"></i> New Customers</h3>
-                <div class="value" id="new-customers">0</div>
-                <div class="change down">
-                    <i class="fas fa-arrow-down"></i> <span id="customers-change">0%</span> from last week
-                </div>
-            </div>
-            <div class="stat-card warning animate-fade delay-4">
-                <h3><i class="fas fa-box"></i> Inventory Alert</h3>
-                <div class="value" id="low-stock">0</div>
-                <div class="change up">
-                    <i class="fas fa-arrow-up"></i> <span id="stock-change">0</span> items need restock
-                </div>
-            </div>
-        </div>
-
-        <!-- Charts Row -->
-        <div class="charts-row">
-            <div class="chart-container">
-                <h2><i class="fas fa-chart-line"></i> Sales Analytics</h2>
-                <div class="chart-wrapper">
-                    <canvas id="salesChart"></canvas>
-                </div>
-            </div>
-            <div class="chart-container">
-                <h2><i class="fas fa-chart-pie"></i> Revenue Sources</h2>
-                <div class="chart-wrapper">
-                    <canvas id="revenueChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Recent Activity Section -->
-        <div class="charts-row">
-            <div class="chart-container">
-                <h2><i class="fas fa-chart-bar"></i> Order Status</h2>
-                <div class="chart-wrapper">
-                    <canvas id="ordersChart"></canvas>
-                </div>
-            </div>
             <div class="chart-container">
                 <h2><i class="fas fa-bell"></i> Recent Activity</h2>
                 <div class="activity-feed" id="activity-feed">
@@ -795,521 +859,7 @@ $initial = strtoupper($initial);
                 </div>
             </div>
         </div>
-
-        <!-- Recent Orders Table -->
-        <div class="table-container">
-            <div class="table-header">
-                <h2><i class="fas fa-clock"></i> Recent Orders</h2>
-                <a href="orders.php" class="btn btn-sm">View All</a>
-            </div>
-            <div id="recent-orders">
-                <div class="loading">
-                    <div class="spinner"></div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- JavaScript -->
-    <script>
-    // Toggle sidebar on mobile
-    document.getElementById('menuToggle').addEventListener('click', function() {
-        document.getElementById('sidebar').classList.toggle('active');
-        this.setAttribute('aria-expanded', 
-            document.getElementById('sidebar').classList.contains('active'));
-    });
-
-    // Initialize dashboard
-    document.addEventListener('DOMContentLoaded', function() {
-        // Set current date
-        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-        document.getElementById('current-date').textContent = new Date().toLocaleDateString('en-US', options);
-        
-        // Load dashboard data
-        fetchDashboardData();
-        
-        // Set up real-time updates
-        setupRealTimeUpdates();
-    });
-
-    // Refresh button
-    document.getElementById('refresh-btn').addEventListener('click', function() {
-        const btn = this;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing';
-        btn.disabled = true;
-        
-        fetchDashboardData();
-        
-        setTimeout(() => {
-            btn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh';
-            btn.disabled = false;
-        }, 1000);
-    });
-    
-    // Fetch dashboard data
-    async function fetchDashboardData() {
-        try {
-            // Show skeleton loading states
-            showSkeletonLoading();
-            
-            // Simulate API call (replace with actual fetch)
-            const response = await simulateApiCall();
-            
-            if (response.success) {
-                updateStats(response.data);
-                renderCharts(response.data);
-                renderRecentOrders(response.data.recent_orders);
-                renderActivityFeed(response.data.recent_activity);
-            } else {
-                showError(response.error || 'Failed to load dashboard data');
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            showError('Failed to connect to server');
-        }
-    }
-    
-    // Simulate API call (replace with actual fetch)
-    function simulateApiCall() {
-        return new Promise(resolve => {
-            setTimeout(() => {
-                resolve({
-                    success: true,
-                    data: generateMockData()
-                });
-            }, 800); // Simulate network delay
-        });
-    }
-    
-    // Generate mock data for demonstration
-    function generateMockData() {
-        // Monthly sales data
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const currentMonth = new Date().getMonth();
-        const monthlyLabels = months.slice(Math.max(0, currentMonth - 5), currentMonth + 1);
-        const monthlySales = monthlyLabels.map((_, i) => 
-            Math.floor(Math.random() * 50000) + 10000 + (i * 5000));
-        
-        // Top products
-        const topProducts = [
-            { name: 'Wireless Headphones', total_sold: 342, total_revenue: 25650 },
-            { name: 'Smart Watch', total_sold: 278, total_revenue: 41700 },
-            { name: 'Bluetooth Speaker', total_sold: 195, total_revenue: 14625 },
-            { name: 'USB-C Cable', total_sold: 512, total_revenue: 7680 },
-            { name: 'Phone Case', total_sold: 423, total_revenue: 12690 }
-        ];
-        
-        // Order status data
-        const orderStatus = [
-            { status: 'Completed', count: 125 },
-            { status: 'Processing', count: 42 },
-            { status: 'Shipped', count: 78 },
-            { status: 'Cancelled', count: 15 }
-        ];
-        
-        // Revenue sources
-        const revenueSources = [
-            { source: 'Electronics', revenue: 45600 },
-            { source: 'Clothing', revenue: 23400 },
-            { source: 'Home Goods', revenue: 18700 },
-            { source: 'Accessories', revenue: 12300 }
-        ];
-        
-        // Recent orders
-        const recentOrders = [
-            { id: 3254, customer_name: 'John Smith', order_date: new Date(), total_price: 125.99, status: 'Completed' },
-            { id: 3253, customer_name: 'Sarah Johnson', order_date: new Date(Date.now() - 86400000), total_price: 89.50, status: 'Shipped' },
-            { id: 3252, customer_name: 'Michael Brown', order_date: new Date(Date.now() - 172800000), total_price: 234.75, status: 'Processing' },
-            { id: 3251, customer_name: 'Emily Davis', order_date: new Date(Date.now() - 259200000), total_price: 56.25, status: 'Completed' },
-            { id: 3250, customer_name: 'Robert Wilson', order_date: new Date(Date.now() - 345600000), total_price: 178.99, status: 'Cancelled' }
-        ];
-        
-        // Recent activity
-        const recentActivity = [
-            { type: 'order_completed', message: 'Order #3254 completed', time: '2 minutes ago' },
-            { type: 'new_customer', message: 'New customer registered', time: '15 minutes ago' },
-            { type: 'low_stock', message: 'Low stock alert for Product X', time: '1 hour ago' },
-            { type: 'order_shipped', message: 'Order #3251 shipped', time: '3 hours ago' }
-        ];
-        
-        return {
-            metrics: {
-                total_revenue: monthlySales.reduce((a, b) => a + b, 0),
-                total_orders: 245,
-                new_customers: 32,
-                low_stock_items: 8,
-                revenue_change: 12.5,
-                orders_change: 5.2,
-                customers_change: -2.3,
-                stock_change: 3
-            },
-            monthly_labels: monthlyLabels,
-            monthly_sales: monthlySales,
-            top_products: topProducts,
-            order_status: orderStatus,
-            revenue_sources: revenueSources,
-            recent_orders: recentOrders,
-            recent_activity: recentActivity
-        };
-    }
-    
-    // Show skeleton loading states
-    function showSkeletonLoading() {
-        document.getElementById('stats-grid').innerHTML = `
-            <div class="stat-card skeleton"></div>
-            <div class="stat-card skeleton"></div>
-            <div class="stat-card skeleton"></div>
-            <div class="stat-card skeleton"></div>
-        `;
-        
-        document.getElementById('recent-orders').innerHTML = `
-            <div class="table-skeleton">
-                <div class="skeleton-row"></div>
-                <div class="skeleton-row"></div>
-                <div class="skeleton-row"></div>
-                <div class="skeleton-row"></div>
-                <div class="skeleton-row"></div>
-            </div>
-        `;
-    }
-    
-    // Update stats cards
-    function updateStats(data) {
-        const metrics = data.metrics;
-        
-        document.getElementById('total-revenue').textContent = '$' + formatNumber(metrics.total_revenue);
-        document.getElementById('total-orders').textContent = formatNumber(metrics.total_orders);
-        document.getElementById('new-customers').textContent = formatNumber(metrics.new_customers);
-        document.getElementById('low-stock').textContent = formatNumber(metrics.low_stock_items);
-        
-        // Update change percentages
-        document.getElementById('revenue-change').textContent = metrics.revenue_change.toFixed(1) + '%';
-        document.getElementById('orders-change').textContent = metrics.orders_change.toFixed(1) + '%';
-        document.getElementById('customers-change').textContent = Math.abs(metrics.customers_change).toFixed(1) + '%';
-        document.getElementById('stock-change').textContent = metrics.stock_change;
-        
-        // Update change indicators
-        document.querySelector('#revenue-change').closest('.change').className = 
-            `change ${metrics.revenue_change >= 0 ? 'up' : 'down'}`;
-        document.querySelector('#orders-change').closest('.change').className = 
-            `change ${metrics.orders_change >= 0 ? 'up' : 'down'}`;
-        document.querySelector('#customers-change').closest('.change').className = 
-            `change ${metrics.customers_change >= 0 ? 'up' : 'down'}`;
-    }
-    
-    // Render charts
-    function renderCharts(data) {
-        // Destroy existing charts if they exist
-        if (window.salesChart) window.salesChart.destroy();
-        if (window.revenueChart) window.revenueChart.destroy();
-        if (window.ordersChart) window.ordersChart.destroy();
-        
-        // Sales Chart (Line)
-        renderSalesChart(data);
-        
-        // Revenue Chart (Doughnut)
-        renderRevenueChart(data);
-        
-        // Orders Chart (Bar)
-        renderOrdersChart(data);
-    }
-    
-    // Render sales chart
-    function renderSalesChart(data) {
-        const salesCtx = document.getElementById('salesChart').getContext('2d');
-        window.salesChart = new Chart(salesCtx, {
-            type: 'line',
-            data: {
-                labels: data.monthly_labels,
-                datasets: [{
-                    label: 'Sales',
-                    data: data.monthly_sales,
-                    borderColor: 'rgba(99, 102, 241, 1)',
-                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    fill: true,
-                    pointBackgroundColor: 'white',
-                    pointBorderColor: 'rgba(99, 102, 241, 1)',
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                }]
-            },
-            options: getChartOptions('Sales', 'currency')
-        });
-    }
-    
-    // Render revenue chart
-    function renderRevenueChart(data) {
-        const revenueCtx = document.getElementById('revenueChart').getContext('2d');
-        window.revenueChart = new Chart(revenueCtx, {
-            type: 'doughnut',
-            data: {
-                labels: data.revenue_sources.map(p => p.source),
-                datasets: [{
-                    data: data.revenue_sources.map(p => p.revenue),
-                    backgroundColor: [
-                        'rgba(99, 102, 241, 0.7)',
-                        'rgba(139, 92, 246, 0.7)',
-                        'rgba(168, 85, 247, 0.7)',
-                        'rgba(217, 70, 239, 0.7)'
-                    ],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '70%',
-                plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: {
-                            padding: 20,
-                            usePointStyle: true,
-                            pointStyle: 'circle',
-                            color: 'var(--gray-700)'
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(30, 41, 59, 0.95)',
-                        callbacks: {
-                            label: function(context) {
-                                const source = data.revenue_sources[context.dataIndex];
-                                return [
-                                    `Revenue: $${formatNumber(source.revenue)}`,
-                                    `${((source.revenue / data.metrics.total_revenue) * 100).toFixed(1)}% of total`
-                                ];
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
-    
-    // Render orders chart
-    function renderOrdersChart(data) {
-        const ordersCtx = document.getElementById('ordersChart').getContext('2d');
-        window.ordersChart = new Chart(ordersCtx, {
-            type: 'bar',
-            data: {
-                labels: data.order_status.map(o => o.status),
-                datasets: [{
-                    label: 'Orders',
-                    data: data.order_status.map(o => o.count),
-                    backgroundColor: [
-                        'rgba(16, 185, 129, 0.7)',
-                        'rgba(59, 130, 246, 0.7)',
-                        'rgba(245, 158, 11, 0.7)',
-                        'rgba(239, 68, 68, 0.7)'
-                    ],
-                    borderWidth: 0,
-                    borderRadius: 4
-                }]
-            },
-            options: getChartOptions('Orders', 'number')
-        });
-    }
-    
-    // Common chart options
-    function getChartOptions(title, valueType) {
-        return {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(30, 41, 59, 0.95)',
-                    titleFont: { size: 14, weight: 'bold' },
-                    bodyFont: { size: 12 },
-                    padding: 12,
-                    cornerRadius: 8,
-                    callbacks: {
-                        label: function(context) {
-                            if (valueType === 'currency') {
-                                return ' $' + context.raw.toLocaleString();
-                            } else {
-                                return ' ' + context.raw.toLocaleString();
-                            }
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: 'rgba(0, 0, 0, 0.05)'
-                    },
-                    ticks: {
-                        callback: function(value) {
-                            if (valueType === 'currency') {
-                                return '$' + (value / 1000) + 'k';
-                            } else {
-                                return value;
-                            }
-                        }
-                    }
-                },
-                x: {
-                    grid: {
-                        display: false
-                    }
-                }
-            }
-        };
-    }
-    
-    // Render recent orders table
-    function renderRecentOrders(orders) {
-        const tableBody = document.getElementById('recent-orders');
-        if (!orders || orders.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No recent orders found</td></tr>';
-            return;
-        }
-
-        let html = `
-            <table>
-                <thead>
-                    <tr>
-                        <th>Order ID</th>
-                        <th>Customer</th>
-                        <th>Date</th>
-                        <th>Amount</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-        
-        orders.forEach(order => {
-            const date = new Date(order.order_date);
-            const statusClass = getStatusClass(order.status);
-            
-            html += `
-                <tr>
-                    <td>#${order.id}</td>
-                    <td>${order.customer_name || 'Guest'}</td>
-                    <td>${date.toLocaleDateString()}</td>
-                    <td>$${order.total_price.toFixed(2)}</td>
-                    <td><span class="badge ${statusClass}">${order.status}</span></td>
-                    <td>
-                        <button class="btn btn-sm" onclick="viewOrder(${order.id})">
-                            <i class="fas fa-eye"></i> View
-                        </button>
-                    </td>
-                </tr>
-            `;
-        });
-
-        html += `
-                </tbody>
-            </table>
-        `;
-        
-        tableBody.innerHTML = html;
-    }
-    
-    // Render activity feed
-    function renderActivityFeed(activities) {
-        const feedContainer = document.getElementById('activity-feed');
-        if (!activities || activities.length === 0) {
-            feedContainer.innerHTML = '<p>No recent activity</p>';
-            return;
-        }
-        
-        let html = '';
-        
-        activities.forEach(activity => {
-            const iconClass = getActivityIconClass(activity.type);
-            
-            html += `
-                <div class="activity-item">
-                    <div class="activity-icon ${iconClass.class}">
-                        <i class="${iconClass.icon}"></i>
-                    </div>
-                    <div class="activity-content">
-                        <p>${activity.message}</p>
-                        <small>${activity.time}</small>
-                    </div>
-                </div>
-            `;
-        });
-        
-        feedContainer.innerHTML = html;
-    }
-    
-    // Get status class for badges
-    function getStatusClass(status) {
-        const statusText = status.toLowerCase();
-        if (statusText.includes('completed')) return 'badge-success';
-        if (statusText.includes('shipped')) return 'badge-info';
-        if (statusText.includes('processing')) return 'badge-warning';
-        if (statusText.includes('cancelled')) return 'badge-danger';
-        return 'badge-info';
-    }
-    
-    // Get icon class for activity items
-    function getActivityIconClass(type) {
-        switch(type) {
-            case 'order_completed':
-                return { class: 'success', icon: 'fas fa-check-circle' };
-            case 'new_customer':
-                return { class: 'primary', icon: 'fas fa-user-plus' };
-            case 'low_stock':
-                return { class: 'warning', icon: 'fas fa-exclamation-triangle' };
-            case 'order_shipped':
-                return { class: 'info', icon: 'fas fa-truck' };
-            default:
-                return { class: 'primary', icon: 'fas fa-info-circle' };
-        }
-    }
-    
-    // Format numbers with commas
-    function formatNumber(num) {
-        return new Intl.NumberFormat('en-US').format(num);
-    }
-    
-    // Set up real-time updates
-    function setupRealTimeUpdates() {
-        // In a real app, you would use WebSocket or Server-Sent Events
-        // For this demo, we'll simulate with setInterval
-        setInterval(() => {
-            // Only update if the tab is visible
-            if (!document.hidden) {
-                fetchDashboardData();
-            }
-        }, 30000); // Update every 30 seconds
-    }
-    
-    // View order details
-    function viewOrder(orderId) {
-        // In a real app, this would redirect to the order details page
-        console.log('Viewing order:', orderId);
-        alert(`Viewing order #${orderId} - this would redirect to the order details page in a real app`);
-    }
-    
-    // Show error message
-    function showError(message) {
-        const errorDiv = document.createElement('div');
-        errorDiv.style.background = 'rgba(239, 68, 68, 0.1)';
-        errorDiv.style.color = 'var(--danger)';
-        errorDiv.style.padding = '1rem';
-        errorDiv.style.borderRadius = '0.5rem';
-        errorDiv.style.marginBottom = '1.25rem';
-        errorDiv.style.display = 'flex';
-        errorDiv.style.alignItems = 'center';
-        errorDiv.style.gap = '0.75rem';
-        errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
-        
-        document.querySelector('.main-content').prepend(errorDiv);
-        setTimeout(() => errorDiv.remove(), 5000);
-    }
-    </script>
+<script src="js/dashboard.js"></script>
 </body>
 </html>
 <?php

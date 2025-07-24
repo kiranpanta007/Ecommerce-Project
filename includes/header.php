@@ -15,7 +15,33 @@ include 'includes/db.php'; // Database connection
     <style>
         /* (Your existing styles remain the same) */
     </style>
-</head>
+</head><script>
+document.addEventListener("DOMContentLoaded", function () {
+    const searchInput = document.getElementById("search-input");
+    const searchButton = document.getElementById("search-button");
+
+    // Handle Enter key press on search input
+    searchInput.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            const query = searchInput.value.trim();
+            if (query !== "") {
+                window.location.href = `search.php?query=${encodeURIComponent(query)}`;
+            }
+        }
+    });
+
+    // Handle search button click
+    searchButton.addEventListener("click", function () {
+        const query = searchInput.value.trim();
+        if (query !== "") {
+            window.location.href = `search.php?query=${encodeURIComponent(query)}`;
+        }
+    });
+});
+</script>
+
+
 <body>
 
 <header>

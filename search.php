@@ -58,7 +58,8 @@ $products = mysqli_fetch_all($result, MYSQLI_ASSOC);
                         <?= htmlspecialchars($product['name']); ?>
                     </h2>
                     <p style="color: #666; padding: 0 10px;">
-                        <?= htmlspecialchars(substr($product['description'], 0, 100)) . '...'; ?>
+                        <?= htmlspecialchars(substr($product['description'] ?? '', 0, 100)) . '...'; ?>
+
                     </p>
                     <p style="font-weight: bold; color: #000; font-size: 1.2em;">
                         <?= CURRENCY_SYMBOL . " " . htmlspecialchars(number_format($product['price'], 2)); ?>
