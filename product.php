@@ -2,7 +2,10 @@
 // Include database connection and stock functions
 include_once 'includes/db.php';
 include 'includes/stock_functions.php';
-session_start(); // Start session for flash messages
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 
 // Validate product ID
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
@@ -131,6 +134,8 @@ include 'includes/header.php';
 
 <!-- CSS Styling -->
 <style>
+
+
     .stock-status { margin: 15px 0; font-weight: bold; }
     .stock-badge {
         padding: 6px 12px;
@@ -146,5 +151,5 @@ include 'includes/header.php';
 
     .btn[disabled] { opacity: 0.6; cursor: not-allowed; }
 
-    .product-card { padding: 10px; border: 1px solid #eee; border-radius: 6px; text-align: center; }
+    .product-card { padding: 10px; border: 2px solid #eee; border-radius: 6px; text-align: center; }
 </style>

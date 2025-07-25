@@ -3,6 +3,12 @@ session_start();
 include 'includes/db.php';
 ob_start(); // Prevent "headers already sent"
 
+
+require __DIR__ . '/vendor/autoload.php'; // ✅ Corrected path to autoloader
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
 // Include header
 include 'includes/header.php';
 
@@ -126,6 +132,46 @@ $reduceStmt->close();
 unset($_SESSION['cart']);
 $_SESSION['order_id'] = $order_id;
 ?>
+<!-- 
+///====================== SEND EMAIL ======================////
+try {
+    $mail = new PHPMailer(true);
+    $mail->isSMTP();
+    $mail->Host       = 'smtp.gmail.com';
+    $mail->SMTPAuth   = true;
+    $mail->Username   = 'your_email@gmail.com'; // Replace
+    $mail->Password   = 'your_app_password';    // Replace
+    $mail->SMTPSecure = 'tls';
+    $mail->Port       = 587;
+
+    $mail->setFrom('your_email@gmail.com', 'Your Store');
+    $mail->addAddress($_SESSION['user_email']);
+
+    $mail->isHTML(true);
+    $mail->Subject = "Order Confirmation - Order #$order_id";
+
+    $body = "<h3>Thank you for your order!</h3>";
+    $body .= "<p>Order ID: <strong>$order_id</strong></p>";
+    $body .= "<table border='1' cellpadding='6' cellspacing='0'><tr><th>Product</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr>";
+    foreach ($checkout_items as $item) {
+        $body .= "<tr>
+                    <td>" . htmlspecialchars($item['name']) . "</td>
+                    <td>" . $item['quantity'] . "</td>
+                    <td>NPR " . number_format($item['price'], 2) . "</td>
+                    <td>NPR " . number_format($item['subtotal'], 2) . "</td>
+                  </tr>";
+    }
+    $body .= "</table>";
+    $body .= "<p><strong>Total Paid: NPR $total_amount_formatted</strong></p>";
+    $body .= "<p>We will process and deliver your order soon.</p>";
+
+    $mail->Body = $body;
+    $mail->send();
+} catch (Exception $e) {
+    error_log("Mail error: " . $mail->ErrorInfo);
+}
+////========================================================////
+?> -->
 
 <!-- Checkout Summary -->
 <div style="max-width: 1200px; margin: 30px auto; padding: 30px; background: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); font-family: Arial;">
