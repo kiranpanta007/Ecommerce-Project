@@ -157,14 +157,14 @@ loadDashboard();
 </html>
 
 
-// CSRF protection
+<!-- // CSRF protection
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
 // Output buffering for performance
 ob_start();
-?>
+?> -->
 <!DOCTYPE html>
 <html lang="en">
 <head>

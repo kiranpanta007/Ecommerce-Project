@@ -83,7 +83,8 @@ include 'includes/header.php';
             <?php endif; ?>
         </div>
 
-        <p class="description"><?= htmlspecialchars($product['description'] ?: 'No description available.'); ?></p>
+      <p class="description"><?= htmlspecialchars($product['description'] ?? 'No description available.'); ?></p>
+
 
         <!-- Add to Cart Form -->
         <?php if ($product['stock'] > 0): ?>
