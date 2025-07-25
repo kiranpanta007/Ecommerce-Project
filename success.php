@@ -2,10 +2,15 @@
 session_start();
 include 'includes/db.php';
 
+require __DIR__ . '/vendor/autoload.php'; // PHPMailer autoload
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
 // eSewa secret key for sandbox
 $secret_key = '8gBm/:&EnhH.1/q';
 
-// Verify 'data' parameter
+// Check if 'data' parameter exists
 if (!isset($_GET['data'])) {
     die("<div class='error-msg'>Invalid response from eSewa: Missing 'data' parameter.</div>");
 }
@@ -22,10 +27,7 @@ if (json_last_error() !== JSON_ERROR_NONE) {
     die("<div class='error-msg'>Invalid JSON in eSewa response.</div>");
 }
 
-// Debug: Log the raw response from eSewa for better visibility
-error_log("Full eSewa Response: " . print_r($response, true));  // Log the full response to debug
-
-// Extract values
+// Extract values from response
 $transaction_code = $response['transaction_code'] ?? '';
 $status = $response['status'] ?? '';
 $total_amount = $response['total_amount'] ?? '';
@@ -34,9 +36,6 @@ $product_code = $response['product_code'] ?? '';
 $signed_field_names = $response['signed_field_names'] ?? '';
 $received_signature = $response['signature'] ?? '';
 $order_id = $response['order_id'] ?? null;
-
-// Debugging: Log the extracted values
-error_log("Extracted values from eSewa response: Transaction Code: $transaction_code, Status: $status, Order ID: $order_id");
 
 // Verify signature
 $signed_fields = explode(',', $signed_field_names);
@@ -56,85 +55,95 @@ if ($expected_signature !== $received_signature) {
     die("<div class='error-msg'>Invalid signature. Payment verification failed.</div>");
 }
 
-// Update transaction status
+// Update transaction status in DB
 $stmt = $conn->prepare("UPDATE transactions SET status = ? WHERE transaction_id = ?");
 $stmt->bind_param("ss", $status, $transaction_uuid);
 $stmt->execute();
 
 if ($stmt->affected_rows > 0) {
-    // If order_id exists, update the order status
-    if ($order_id) {
-        $order_stmt = $conn->prepare("UPDATE orders SET status = 'completed' WHERE id = ?");
-        $order_stmt->bind_param("i", $order_id);
-        $order_stmt->execute();
-
-        if ($order_stmt->affected_rows > 0) {
-            // Set success message for order update
-            $order_update_msg = "<p class='success-msg'>Order #$order_id status updated to 'completed'.</p>";
-        } else {
-            // Set error message if order update failed
-            $order_update_msg = "<p class='error-msg'>Failed to update order status. Please verify Order ID: $order_id.</p>";
-        }
-        $order_stmt->close();
-    } else {
-        // If order_id is missing, fetch it using transaction_uuid
+    // If order_id not passed, get it using transaction_uuid
+    if (!$order_id) {
         $stmt = $conn->prepare("SELECT id FROM orders WHERE transaction_uuid = ?");
         $stmt->bind_param("s", $transaction_uuid);
         $stmt->execute();
         $stmt->bind_result($order_id);
         $stmt->fetch();
         $stmt->close();
+    }
 
-        if ($order_id) {
-            // Once you have the order_id, update the order status
-            $order_stmt = $conn->prepare("UPDATE orders SET status = 'completed' WHERE id = ?");
-            $order_stmt->bind_param("i", $order_id);
-            $order_stmt->execute();
+    // Update order status to 'completed'
+    if ($order_id) {
+        $order_stmt = $conn->prepare("UPDATE orders SET status = 'completed' WHERE id = ?");
+        $order_stmt->bind_param("i", $order_id);
+        $order_stmt->execute();
 
-            if ($order_stmt->affected_rows > 0) {
-                // Set success message for order update
-                $order_update_msg = "<p class='success-msg'>Order #$order_id status updated to 'completed'.</p>";
-            } else {
-                // Set error message if order update failed
-                $order_update_msg = "<p class='error-msg'>Failed to update order status. Please verify Order ID: $order_id.</p>";
-            }
-            $order_stmt->close();
-        } else {
-            // If no order_id is found, show an error message
-            $order_update_msg = "<p class='error-msg'>No order found with the given transaction UUID. Please contact support.</p>";
+        if ($order_stmt->affected_rows > 0) {
+            $order_update_msg = "<p class='success-msg'>Order #$order_id status updated to 'completed'.</p>";
         }
-    }
-
-    // **Send Email Confirmation**
-    $to = filter_var($_SESSION['user_email'], FILTER_SANITIZE_EMAIL); // Sanitize email
-    $subject = "Order Confirmation - Thank You for Your Purchase!";
-    $message = "Hello " . htmlspecialchars($_SESSION['user_name']) . ",\n\n";
-    $message .= "Thank you for your order. Here are your details:\n";
-    $message .= "Transaction Code: " . htmlspecialchars($transaction_code) . "\n";
-    $message .= "Total Amount: NPR " . number_format((float)$total_amount, 2) . "\n";
-    $message .= "Transaction ID: " . htmlspecialchars($transaction_uuid) . "\n";
-    $message .= "Order Status: Completed\n\n";
-    $message .= "We will notify you once your order is shipped.\n";
-    $message .= "Thank you for shopping with us!\n\nBest regards,\nYour Shop Name";
-
-    $headers = "From: Your Shop Name <kiranpanta9846@gmail.com>\r\n";
-    $headers .= "Reply-To: kiranpanta9846@gmail.com\r\n";
-    $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
-
-    // Send email and handle potential errors
-    if (mail($to, $subject, $message, $headers)) {
-        $email_msg = "<p class='success-msg'>Confirmation email sent to $to.</p>";
+        $order_stmt->close();
     } else {
-        error_log("Email sending failed to $to for transaction $transaction_uuid");
-        $email_msg = "<p class='error-msg'>Failed to send confirmation email. Please contact support.</p>";
+        $order_update_msg = "<p class='error-msg'>No order found for this transaction. Please contact support.</p>";
     }
 
-    // Payment success message
+    // Fetch user email and name by order_id
+    $user_email = '';
+    $user_name = '';
+    if ($order_id) {
+        $stmt = $conn->prepare("SELECT u.email, u.name FROM users u JOIN orders o ON u.id = o.user_id WHERE o.id = ?");
+        $stmt->bind_param("i", $order_id);
+        $stmt->execute();
+        $stmt->bind_result($user_email, $user_name);
+        $stmt->fetch();
+        $stmt->close();
+    }
+
+    // Send confirmation email with PHPMailer
+    if ($user_email) {
+        try {
+            $mail = new PHPMailer(true);
+
+            // SMTP config - replace with your real SMTP credentials
+            $mail->isSMTP();
+            $mail->Host       = 'smtp.gmail.com';
+            $mail->SMTPAuth   = true;
+            $mail->Username   = 'your_email@gmail.com';        // Your SMTP email
+            $mail->Password   = 'your_app_password';           // Your SMTP password or app password
+            $mail->SMTPSecure = 'tls';
+            $mail->Port       = 587;
+
+            $mail->setFrom('your_email@gmail.com', 'Your Store Name');
+            $mail->addAddress($user_email, $user_name ?: '');
+
+            $mail->isHTML(true);
+            $mail->Subject = "Order Confirmation - Order #$order_id";
+
+            $body = "<h3>Thank you for your order!</h3>";
+            $body .= "<p>Hi " . htmlspecialchars($user_name) . ",</p>";
+            $body .= "<p>Your order #<strong>$order_id</strong> has been successfully paid.</p>";
+            $body .= "<p>Transaction Code: <strong>" . htmlspecialchars($transaction_code) . "</strong><br>";
+            $body .= "Total Amount: <strong>NPR " . number_format((float)$total_amount, 2) . "</strong></p>";
+            $body .= "<p>We will process and deliver your order soon.</p>";
+            $body .= "<p>Thank you for shopping with us!</p>";
+            $body .= "<br><p>Best regards,<br>Your Store Name</p>";
+
+            $mail->Body = $body;
+
+            $mail->send();
+            $email_msg = "<p class='success-msg'>Confirmation email sent to $user_email.</p>";
+        } catch (Exception $e) {
+            error_log("Email sending failed: " . $mail->ErrorInfo);
+            $email_msg = "<p class='error-msg'>Failed to send confirmation email. Please contact support.</p>";
+        }
+    } else {
+        $email_msg = "<p class='error-msg'>User email not found for order #$order_id.</p>";
+    }
+
+    // Show confirmation page with messages
     echo "
     <div class='payment-success-container'>
         <h2 class='success-title'>Payment Successful!</h2>
         <p class='success-msg'>Thank you for your payment.</p>
-        <table class='transaction-details'>
+        <table class='transaction-details' style='margin: 0 auto;'>
             <tr><td><strong>Transaction Code:</strong></td><td>" . htmlspecialchars($transaction_code) . "</td></tr>
             <tr><td><strong>Status:</strong></td><td>" . htmlspecialchars($status) . "</td></tr>
             <tr><td><strong>Total Amount:</strong></td><td>NPR " . number_format((float)$total_amount, 2) . "</td></tr>
@@ -147,7 +156,7 @@ if ($stmt->affected_rows > 0) {
     </div>";
 
 } else {
-    echo "<div class='error-msg'>Failed to update transaction. Contact support.</div>";
+    echo "<div class='error-msg'>Failed to update transaction status. Please contact support.</div>";
 }
 
 $conn->close();
@@ -162,11 +171,23 @@ $conn->close();
     border-radius: 8px;
     background-color: #f9f9f9;
     text-align: center;
+    font-family: Arial, sans-serif;
 }
 
-.success-title { color: #28a745; font-size: 28px; }
-.success-msg, .error-msg { font-size: 18px; }
-.transaction-details td { padding: 10px; border-bottom: 1px solid #ddd; }
-.continue-btn { padding: 12px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 4px; }
-.continue-btn:hover { background-color: #0056b3; }
+.success-title { color: #28a745; font-size: 28px; margin-bottom: 15px; }
+.success-msg { color: #28a745; font-size: 18px; }
+.error-msg { color: #dc3545; font-size: 18px; }
+.transaction-details td { padding: 10px 15px; border-bottom: 1px solid #ddd; text-align: left; }
+.continue-btn {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 12px 20px;
+    background-color: #007bff;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+}
+.continue-btn:hover {
+    background-color: #0056b3;
+}
 </style>
