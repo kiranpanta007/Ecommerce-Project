@@ -7,9 +7,9 @@
             <li><a href="policy.php">Privacy Policy</a></li>
         </ul>
         <div class="social-icons">
-            <a href="https://www.facebook.com/Kiran_Panta">🔵 Facebook</a>
-            <a href="">📸 Instagram</a>
-            <a href="">🐦 Twitter</a>
+            <a href="https://www.facebook.com/Kiran_Panta">Facebook</a>
+            <a href="">Instagram</a>
+            <a href="">Twitter</a>
         </div>
     </div>
 </footer>
