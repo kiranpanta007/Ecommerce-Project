@@ -58,137 +58,217 @@ if (!empty($imageFile) && $imageFile !== '0') {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Edit Product - <?= htmlspecialchars($product['name']) ?></title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Edit Product - <?= htmlspecialchars($product['name']) ?></title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            padding-top: 80px;
-            margin: 0;
-            background-color: #f8f9fa;
-            min-height: 100vh;
+        :root {
+            --primary: #22c55e;
+            --primary-dark: #16a34a;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-600: #475569;
+            --gray-800: #1e293b;
+            --font-size: 16px;
         }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--gray-100);
+            padding-top: 80px;
+            color: var(--gray-800);
+            font-size: var(--font-size);
+            line-height: 1.6;
+        }
+
         header {
-            background-color: #343a40;
-            color: white;
-            padding: 20px;
-            width: 100%;
+            background-color: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            padding: 24px 32px;
             position: fixed;
             top: 0;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            width: 100%;
+            z-index: 999;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
+
+        header h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
         .back-button {
-            background: #6c757d;
-            color: white;
-            padding: 8px 15px;
-            border-radius: 4px;
-            text-decoration: none;
-            position: absolute;
-            right: 20px;
-            top: 20px;
-            transition: background 0.3s;
-        }
-        .back-button:hover {
-            background: #5a6268;
-        }
+    background: #3b82f6;        /* Blue 500 */
+    color: white;
+    padding: 10px 18px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: background 0.3s ease;
+    font-size: 0.95rem;
+}
+
+.back-button:hover {
+    background: #1e40af;        /* Blue 900 - Darker blue */
+    color: white;
+}
+
+
         main {
             background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.05);
-            width: 90%;
-            max-width: 600px;
-            margin: 30px auto;
+            padding: 2.5rem;
+            border-radius: 16px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+            max-width: 800px;
+            margin: 50px auto;
         }
+
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 1.75rem;
         }
+
         label {
             display: block;
-            font-weight: 600;
-            margin-bottom: 5px;
-            color: #495057;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            font-size: 1rem;
         }
+
         input, textarea, select {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            transition: border 0.3s;
+            padding: 14px 16px;
+            border: 1px solid var(--gray-300);
+            border-radius: 10px;
+            font-size: 1rem;
+            background: white;
+            transition: 0.3s;
         }
+
         input:focus, textarea:focus, select:focus {
-            border-color: #80bdff;
-            outline: 0;
-            box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
         }
+
         .submit-button {
-            background: #28a745;
+            background-color: var(--primary);
             color: white;
-            padding: 10px 20px;
+            font-weight: 600;
+            padding: 14px 20px;
             border: none;
-            border-radius: 4px;
+            border-radius: 10px;
             cursor: pointer;
-            font-size: 16px;
-            transition: background 0.3s;
+            font-size: 1rem;
+            transition: background 0.3s ease, transform 0.2s;
             width: 100%;
         }
+
         .submit-button:hover {
-            background: #218838;
+            background-color: var(--primary-dark);
+            transform: translateY(-1px);
         }
+
         .message {
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 20px;
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 1.75rem;
+            font-weight: 500;
         }
+
         .success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+            background-color: #dcfce7;
+            color: #166534;
         }
+
         .error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+            background-color: #fee2e2;
+            color: #991b1b;
         }
+
         .current-image {
-            margin: 15px 0;
             text-align: center;
+            margin-top: 10px;
         }
+
         .current-image img {
-            max-width: 200px;
-            max-height: 200px;
-            border-radius: 4px;
-            border: 1px solid #dee2e6;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 220px;
+            max-height: 220px;
+            border-radius: 12px;
+            border: 1px solid var(--gray-200);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
         }
+
+        .form-text {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+            margin-top: 0.4rem;
+        }
+
         .stock-status {
             display: inline-block;
-            padding: 3px 8px;
-            border-radius: 3px;
-            font-size: 14px;
+            padding: 0.35rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
             font-weight: 600;
         }
+
         .stock-in_stock {
-            background: #d4edda;
-            color: #155724;
+            background: #dcfce7;
+            color: #166534;
         }
+
         .stock-low_stock {
-            background: #fff3cd;
-            color: #856404;
+            background: #fef9c3;
+            color: #92400e;
         }
+
         .stock-out_of_stock {
-            background: #f8d7da;
-            color: #721c24;
+            background: #fee2e2;
+            color: #991b1b;
         }
-        .form-text {
-            font-size: 13px;
-            color: #6c757d;
-            margin-top: 5px;
-        }
-        textarea {
-            min-height: 100px;
-            resize: vertical;
+
+        @media (max-width: 768px) {
+            main {
+                margin: 20px 1rem;
+                padding: 1.75rem;
+            }
+
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            header h1 {
+                font-size: 1.5rem;
+            }
+
+            .back-button {
+                font-size: 0.9rem;
+            }
         }
     </style>
 </head>
+
+</head>
+
+
 <body>
     <header>
         <h1 style="margin: 0; font-size: 24px;">Edit Product: <?= htmlspecialchars($product['name']) ?></h1>
@@ -240,12 +320,12 @@ if (!empty($imageFile) && $imageFile !== '0') {
                 <small class="form-text">Max size: 2MB (JPEG, PNG, GIF)</small>
             </div>
 
-            <div class="form-group">
+            <!-- <div class="form-group">
                 <label for="image_url">Or Image URL</label>
                 <input type="url" id="image_url" name="image_url" 
                        value="<?= htmlspecialchars($product['image']); ?>" 
                        placeholder="https://example.com/image.jpg">
-            </div>
+            </div> -->
 
             <div class="form-group">
                 <label for="category_id">Category</label>

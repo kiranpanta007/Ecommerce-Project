@@ -290,24 +290,37 @@ $products = $stmt->fetch_all(MYSQLI_ASSOC);
         }
 
         .btn-edit {
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--success);
-            border: none;
-        }
+    background: var(--success);
+    color: white;
+    border: none;
+    font-weight: 500;
+    padding: 0.5rem 0.85rem;
+    border-radius: 0.375rem;
+    box-shadow: 0 1px 2px rgba(16, 185, 129, 0.2);
+}
 
-        .btn-edit:hover {
-            background: rgba(16, 185, 129, 0.2);
-        }
+.btn-edit:hover {
+    background: #059669;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(16, 185, 129, 0.25);
+}
 
-        .btn-delete {
-            background: rgba(239, 68, 68, 0.1);
-            color: var(--danger);
-            border: none;
-        }
+.btn-delete {
+    background: var(--danger);
+    color: white;
+    border: none;
+    font-weight: 500;
+    padding: 0.5rem 0.85rem;
+    border-radius: 0.375rem;
+    box-shadow: 0 1px 2px rgba(239, 68, 68, 0.2);
+}
 
-        .btn-delete:hover {
-            background: rgba(239, 68, 68, 0.2);
-        }
+.btn-delete:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(239, 68, 68, 0.25);
+}
+
 
         /* Responsive */
         @media (max-width: 992px) {

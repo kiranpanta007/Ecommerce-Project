@@ -80,57 +80,64 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Add Product</title>
-    <style>
-        /* Your existing styles */
+     <style>
+        /* Modern font & reset */
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
+            background-color: #f8f9fa;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100vh;
+            padding-top: 80px;
         }
 
         header {
-            background-color: #333;
+            background-color: #343a40;
             color: white;
-            text-align: center;
             padding: 20px;
             width: 100%;
             position: fixed;
             top: 0;
-            left: 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
         }
 
-        h1 {
+        header h1 {
             margin: 0;
-            font-size: 24px;
+            font-size: 28px;
+            font-weight: 700;
         }
 
         .back-button {
-            display: inline-block;
-            padding: 10px 20px;
-            background: #007bff;
+            background: #3b82f6; /* Blue */
             color: white;
+            padding: 10px 18px;
+            border-radius: 6px;
             text-decoration: none;
-            border-radius: 5px;
+            font-weight: 600;
             position: absolute;
             right: 20px;
-            top: 15px;
+            top: 22px;
+            font-size: 0.95rem;
+            transition: background 0.3s ease;
         }
 
-        /* Form Styling */
+        .back-button:hover {
+            background: #1e40af; /* Darker blue */
+            color: white;
+        }
+
         main {
-            margin-top: 100px;
             background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            width: 400px;
-            text-align: center;
+            padding: 30px 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.07);
+            width: 90%;
+            max-width: 450px;
+            box-sizing: border-box;
+            margin: auto 0;
         }
 
         .form-group {
@@ -140,27 +147,42 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         label {
             display: block;
-            font-weight: bold;
-            margin-bottom: 5px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #495057;
+            font-size: 1rem;
         }
 
         input[type="text"],
         input[type="number"],
         input[type="file"] {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+            padding: 12px 14px;
+            font-size: 1rem;
+            border: 1.5px solid #ced4da;
+            border-radius: 6px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        input[type="file"]:focus {
+            border-color: #3b82f6;
+            outline: none;
+            box-shadow: 0 0 0 0.2rem rgba(59,130,246,0.25);
         }
 
         .submit-button {
+            width: 100%;
             background: #28a745;
             color: white;
-            padding: 10px 15px;
+            padding: 14px 0;
+            font-size: 18px;
+            font-weight: 700;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 16px;
+            transition: background 0.3s;
         }
 
         .submit-button:hover {
@@ -168,13 +190,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
 
         .error {
-            color: red;
-            font-weight: bold;
+            color: #dc3545;
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 1rem;
         }
 
         .success {
-            color: green;
-            font-weight: bold;
+            color: #28a745;
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 1rem;
         }
     </style>
 </head>
