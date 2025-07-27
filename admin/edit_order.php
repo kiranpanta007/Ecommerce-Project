@@ -7,39 +7,51 @@ if (!isset($_SESSION['admin_logged_in'])) {
     exit();
 }
 
-if (!isset($_GET['id'])) {
-    die('Order ID missing');
-}
-
-$orderId = (int)$_GET['id'];
+$orderId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$isNew = ($orderId === 0);
 $error = '';
 $success = '';
+$order = [
+    'id' => 0,
+    'user_id' => null,
+    'order_date' => date('Y-m-d'),
+    'total_price' => 0.00,
+    'status' => 'pending',
+    'payment_method' => 'credit_card',
+    'shipping_status' => 'pending',
+    'transaction_uuid' => '',
+    'username' => 'Guest',
+    'email' => 'N/A'
+];
 
-// Fetch the order details
-$stmt = $conn->prepare("
-    SELECT o.id, o.user_id, o.order_date, o.total_price, o.status, o.payment_method, o.shipping_status, o.transaction_uuid,
-           COALESCE(u.username, 'Guest') AS username, COALESCE(u.email, 'N/A') AS email
-    FROM orders o
-    LEFT JOIN users u ON o.user_id = u.id
-    WHERE o.id = ?
-");
-$stmt->bind_param('i', $orderId);
-$stmt->execute();
-$result = $stmt->get_result();
-$order = $result->fetch_assoc();
-$stmt->close();
+if (!$isNew) {
+    // Fetch order data for editing
+    $stmt = $conn->prepare("
+        SELECT o.id, o.user_id, o.order_date, o.total_price, o.status, o.payment_method, o.shipping_status, o.transaction_uuid,
+               COALESCE(u.username, 'Guest') AS username, COALESCE(u.email, 'N/A') AS email
+        FROM orders o
+        LEFT JOIN users u ON o.user_id = u.id
+        WHERE o.id = ?
+    ");
+    $stmt->bind_param('i', $orderId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $fetchedOrder = $result->fetch_assoc();
+    $stmt->close();
 
-if (!$order) {
-    die('Order not found');
+    if (!$fetchedOrder) {
+        die('Order not found');
+    }
+
+    $order = $fetchedOrder;
 }
 
-// Handle POST update
+// Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $newStatus = $_POST['status'] ?? $order['status'];
     $newPaymentMethod = $_POST['payment_method'] ?? $order['payment_method'];
     $newShippingStatus = $_POST['shipping_status'] ?? $order['shipping_status'];
 
-    // Validate input (basic example)
     $validStatuses = ['pending', 'processing', 'completed', 'cancelled'];
     $validPaymentMethods = ['credit_card', 'paypal', 'bank_transfer', 'cash_on_delivery'];
     $validShippingStatuses = ['pending', 'shipped', 'delivered', 'returned'];
@@ -53,25 +65,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$error) {
-        $updateStmt = $conn->prepare("
-            UPDATE orders
-            SET status = ?, payment_method = ?, shipping_status = ?
-            WHERE id = ?
-        ");
-        $updateStmt->bind_param('sssi', $newStatus, $newPaymentMethod, $newShippingStatus, $orderId);
-        if ($updateStmt->execute()) {
-            $success = "Order updated successfully.";
-            // Refresh $order with new data
-            $order['status'] = $newStatus;
-            $order['payment_method'] = $newPaymentMethod;
-            $order['shipping_status'] = $newShippingStatus;
+        if ($isNew) {
+            // Create new order
+            $insertStmt = $conn->prepare("
+                INSERT INTO orders (user_id, order_date, total_price, status, payment_method, shipping_status, transaction_uuid)
+                VALUES (NULL, NOW(), 0.00, ?, ?, ?, UUID())
+            ");
+            $insertStmt->bind_param('sss', $newStatus, $newPaymentMethod, $newShippingStatus);
+            if ($insertStmt->execute()) {
+                $newOrderId = $insertStmt->insert_id;
+                header("Location: edit_order.php?id=$newOrderId&created=1");
+                exit();
+            } else {
+                $error = "Failed to create order.";
+            }
+            $insertStmt->close();
         } else {
-            $error = "Failed to update order. Please try again.";
+            // Update existing order
+            $updateStmt = $conn->prepare("
+                UPDATE orders
+                SET status = ?, payment_method = ?, shipping_status = ?
+                WHERE id = ?
+            ");
+            $updateStmt->bind_param('sssi', $newStatus, $newPaymentMethod, $newShippingStatus, $orderId);
+            if ($updateStmt->execute()) {
+                $success = "Order updated successfully.";
+                $order['status'] = $newStatus;
+                $order['payment_method'] = $newPaymentMethod;
+                $order['shipping_status'] = $newShippingStatus;
+            } else {
+                $error = "Failed to update order.";
+            }
+            $updateStmt->close();
         }
-        $updateStmt->close();
     }
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">

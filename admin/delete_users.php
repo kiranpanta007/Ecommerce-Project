@@ -7,25 +7,23 @@ if (!isset($_SESSION['admin_id'])) {
 
 include '../includes/db.php';
 
-// Validate 'id' parameter
 if (isset($_GET['id'])) {
-    $user_id = intval($_GET['id']); // Sanitize input
+    $user_id = intval($_GET['id']);
 
-    // Prepare the delete statement
     $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
     $stmt->bind_param("i", $user_id);
 
     if ($stmt->execute()) {
-        $stmt->close();
-        header("Location: users.php?msg=User deleted successfully");
-        exit();
+        $_SESSION['success'] = "User deleted successfully.";
     } else {
-        $stmt->close();
-        header("Location: users.php?error=Failed to delete user");
-        exit();
+        $_SESSION['error'] = "Failed to delete user.";
     }
+    $stmt->close();
 } else {
-    header("Location: users.php?error=Invalid user ID");
-    exit();
+    $_SESSION['error'] = "Invalid user ID.";
 }
+
+// Redirect back to customers page
+header("Location: customers.php");
+exit();
 ?>

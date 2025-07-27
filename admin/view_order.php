@@ -23,7 +23,11 @@ $order_id = (int)$_GET['id'];
 // Fetch order details and user info
 $sql = "
   SELECT o.id, o.user_id,
-         COALESCE(u.username, 'Guest') AS customer_name,
+         CASE 
+             WHEN u.name IS NOT NULL AND u.name <> '' THEN u.name
+             WHEN u.username IS NULL OR u.username = '' THEN 'Guest'
+             ELSE u.username 
+         END AS customer_name,
          COALESCE(u.email, 'N/A') AS email,
          COALESCE(u.phone, 'N/A') AS phone,
          COALESCE(u.address, 'N/A') AS address,
@@ -43,6 +47,7 @@ $sql = "
 
 
 
+
 $stmt = $conn->prepare($sql);
 $stmt->bind_param('i', $order_id);
 $stmt->execute();
@@ -59,7 +64,7 @@ $order['order_date'] = date('M d, Y', strtotime($order['order_date']));
 
 // Fetch ordered products for this order using transaction_uuid as filter
 $sql_products = "
-  SELECT p.name, oi.price, oi.quantity, oi.subtotal
+  SELECT p.name, p.image , oi.price, oi.quantity, oi.subtotal
   FROM order_items oi
   JOIN products p ON oi.product_id = p.id
   WHERE oi.transaction_id = ?

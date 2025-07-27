@@ -358,39 +358,53 @@ $users = $stmt->fetch_all(MYSQLI_ASSOC);
                 <input type="text" id="search-input" placeholder="Search by name or email">
             </div>
 
-            <table class="customers-table">
-                <thead>
-                    <tr>
-                        <th>User ID</th>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Registered</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (empty($users)): ?>
-                        <tr>
-                            <td colspan="5" class="no-customers">No customers found</td>
-                        </tr>
-                    <?php else: ?>
-                        <?php foreach ($users as $user): ?>
-                        <tr>
-                            <td>#<?= htmlspecialchars($user['id']) ?></td>
-                            <td><?= htmlspecialchars($user['name']) ?></td>
-                            <td><?= htmlspecialchars($user['email']) ?></td>
-                            <td><?= date('M d, Y', strtotime($user['created_at'])) ?></td>
-                            <td>
-                                <a href="delete_users.php?id=<?= $user['id'] ?>" class="action-btn delete-btn" onclick="return confirm('Are you sure you want to delete this customer?');">
-                                    <i class="fas fa-trash"></i> Delete
-                                </a>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
+       <div class="customers-container">
+
+    <?php 
+    if (isset($_SESSION['success'])) {
+        echo '<p style="color: green; font-weight: bold; margin-bottom: 1rem;">' . htmlspecialchars($_SESSION['success']) . '</p>';
+        unset($_SESSION['success']);
+    }
+    if (isset($_SESSION['error'])) {
+        echo '<p style="color: red; font-weight: bold; margin-bottom: 1rem;">' . htmlspecialchars($_SESSION['error']) . '</p>';
+        unset($_SESSION['error']);
+    }
+    ?>
+
+    <table class="customers-table">
+        <thead>
+            <tr>
+                <th>User ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Registered</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if (empty($users)): ?>
+                <tr>
+                    <td colspan="5" class="no-customers">No customers found</td>
+                </tr>
+            <?php else: ?>
+                <?php foreach ($users as $user): ?>
+                <tr>
+                    <td>#<?= htmlspecialchars($user['id']) ?></td>
+                    <td><?= htmlspecialchars($user['name']) ?></td>
+                    <td><?= htmlspecialchars($user['email']) ?></td>
+                    <td><?= date('M d, Y', strtotime($user['created_at'])) ?></td>
+                    <td>
+                        <a href="delete_users.php?id=<?= $user['id'] ?>" class="action-btn delete-btn" onclick="return confirm('Are you sure you want to delete this customer?');">
+                            <i class="fas fa-trash"></i> Delete
+                        </a>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </tbody>
+    </table>
+</div>
+
     </main>
 
     <script>

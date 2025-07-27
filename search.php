@@ -74,7 +74,7 @@ $products = mysqli_fetch_all($result, MYSQLI_ASSOC);
             <?php endforeach; ?>
         </div>
     <?php else: ?>
-        <p style="text-align: center; color: #ff0000; font-size: 1.2em;">
+        <p style="text-align: center; color: #ff0000; font-size: 1.2em;  min-height: 51vh">
             No products found matching your search.
         </p>
     <?php endif; ?>
