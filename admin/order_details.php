@@ -1,15 +1,15 @@
 <?php
-// Enable full error reporting
+// Error reporting for development
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Start session if not already started
+// Start session
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Verify admin is logged in
+// Check if admin is logged in
 if (!isset($_SESSION['admin_logged_in'])) {
     header("Location: login.php");
     exit();
@@ -22,13 +22,14 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
     exit();
 }
 
+define('CURRENCY_SYMBOL', '₹'); // Change to your preferred symbol
+
 $order_id = (int)$_GET['id'];
 
-// Database connection
 require_once __DIR__ . '/../includes/db.php';
 
 try {
-    // Get order details - only existing columns
+    // Get order and customer info
     $stmt = $conn->prepare("
         SELECT 
             o.*, 
@@ -38,20 +39,11 @@ try {
         LEFT JOIN users u ON o.user_id = u.id
         WHERE o.id = ?
     ");
-    
-    if (!$stmt) {
-        throw new Exception("Database error: " . $conn->error);
-    }
-    
     $stmt->bind_param("i", $order_id);
-    
-    if (!$stmt->execute()) {
-        throw new Exception("Execute failed: " . $stmt->error);
-    }
-    
-    $result = $stmt->get_result();
-    $order = $result->fetch_assoc();
-    
+    $stmt->execute();
+    $order = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
     if (!$order) {
         throw new Exception("Order not found");
     }
@@ -66,22 +58,14 @@ try {
         LEFT JOIN products p ON oi.product_id = p.id
         WHERE oi.order_id = ?
     ");
-    
-    if (!$stmt) {
-        throw new Exception("Database error: " . $conn->error);
-    }
-    
     $stmt->bind_param("i", $order_id);
-    
-    if (!$stmt->execute()) {
-        throw new Exception("Execute failed: " . $stmt->error);
-    }
-    
+    $stmt->execute();
     $items = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
 
 } catch (Exception $e) {
     error_log("Order Details Error: " . $e->getMessage());
-    $_SESSION['error'] = "Error loading order details. Please try again.";
+    $_SESSION['error'] = "Error loading order details.";
     header("Location: orders.php");
     exit();
 }
@@ -91,83 +75,164 @@ try {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Order Details - Admin Panel</title>
     <link rel="stylesheet" href="../styles/style.css">
     <style>
-        /* [Previous CSS styles remain exactly the same] */
+        .order-details-container {
+            max-width: 800px;
+            margin: 40px auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        }
+        .order-header, .customer-info, .shipping-info {
+            margin-bottom: 20px;
+        }
+        .order-status {
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status-pending { background: orange; color: white; }
+        .status-processing { background: blue; color: white; }
+        .status-completed { background: green; color: white; }
+        .status-cancelled { background: red; color: white; }
+        table.items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .items-table th, .items-table td {
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+            text-align: left;
+        }
+        .items-table img {
+            width: 60px;
+            height: auto;
+            border-radius: 4px;
+        }
+        .order-summary {
+            margin-top: 25px;
+            font-size: 16px;
+        }
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 6px 0;
+        }
+        .summary-total {
+            font-weight: bold;
+            border-top: 1px solid #ccc;
+            padding-top: 8px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 18px;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
-    <?php include 'admin_header.php'; ?>
 
-    <div class="order-details-container">
-        <?php if (isset($_SESSION['error'])): ?>
-            <div class="error-message"><?= htmlspecialchars($_SESSION['error']) ?></div>
-            <?php unset($_SESSION['error']); ?>
-        <?php endif; ?>
+<?php include 'admin_header.php'; ?>
 
-        <div class="order-header">
-            <div class="order-info">
-                <h2>Order #<?= htmlspecialchars($order['id'] ?? 'N/A') ?></h2>
-                <p>Placed on <?= isset($order['order_date']) ? date('F j, Y \a\t h:i A', strtotime($order['order_date'])) : 'Date not available' ?></p>
-                <span class="order-status status-<?= htmlspecialchars($order['status'] ?? 'pending') ?>">
-                    <?= ucfirst(htmlspecialchars($order['status'] ?? 'Pending')) ?>
-                </span>
-            </div>
-            
-            <div class="customer-info">
-                <h3>Customer Information</h3>
-                <p><strong>Name:</strong> <?= htmlspecialchars($order['username'] ?? 'Guest') ?></p>
-                <p><strong>Email:</strong> <?= htmlspecialchars($order['email'] ?? 'N/A') ?></p>
-                <!-- Shipping address removed since it's not in your schema -->
-            </div>
-        </div>
+<div class="order-details-container">
 
-        <h3>Order Items</h3>
-        <?php if (empty($items)): ?>
-            <p>No items found for this order.</p>
-        <?php else: ?>
-            <table class="items-table">
-                <!-- [Table header remains the same] -->
-                <tbody>
-                    <?php foreach ($items as $item): ?>
-                    <tr>
-                        <td>
-                            <div style="display: flex; align-items: center; gap: 15px;">
-                                <?php if (!empty($item['image'])): ?>
-                                    <img src="../uploads/<?= htmlspecialchars($item['image']) ?>" 
-                                         alt="<?= htmlspecialchars($item['name']) ?>" 
-                                         class="product-img">
-                                <?php endif; ?>
-                                <span><?= htmlspecialchars($item['name'] ?? 'Unknown Product') ?></span>
-                            </div>
-                        </td>
-                        <td><?= CURRENCY_SYMBOL ?> <?= number_format($item['price'] ?? 0, 2) ?></td>
-                        <td><?= htmlspecialchars($item['quantity'] ?? 0) ?></td>
-                        <td><?= CURRENCY_SYMBOL ?> <?= number_format(($item['price'] ?? 0) * ($item['quantity'] ?? 0), 2) ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        <?php endif; ?>
+    <?php if (isset($_SESSION['error'])): ?>
+        <div style="color: red;"><?= htmlspecialchars($_SESSION['error']) ?></div>
+        <?php unset($_SESSION['error']); ?>
+    <?php endif; ?>
 
-        <div class="order-summary">
-            <div class="summary-row">
-                <span>Subtotal:</span>
-                <span><?= CURRENCY_SYMBOL ?> <?= number_format(($order['total_amount'] ?? 0) - ($order['shipping_cost'] ?? 0), 2) ?></span>
-            </div>
-            <div class="summary-row">
-                <span>Shipping:</span>
-                <span><?= CURRENCY_SYMBOL ?> <?= number_format($order['shipping_cost'] ?? 0, 2) ?></span>
-            </div>
-            <div class="summary-row summary-total">
-                <span>Total:</span>
-                <span><?= CURRENCY_SYMBOL ?> <?= number_format($order['total_amount'] ?? 0, 2) ?></span>
-            </div>
-        </div>
-
-        <a href="orders.php" class="back-link">Back to Orders</a>
+    <div class="order-header">
+        <h2>Order #<?= htmlspecialchars($order['id']) ?></h2>
+        <p>Placed on <?= date('F j, Y \a\t h:i A', strtotime($order['order_date'])) ?></p>
+        <span class="order-status status-<?= htmlspecialchars($order['status']) ?>">
+            <?= ucfirst(htmlspecialchars($order['status'])) ?>
+        </span>
     </div>
+
+    <div class="customer-info">
+        <h3>Customer Info</h3>
+        <p><strong>Name:</strong> <?= htmlspecialchars($order['username']) ?></p>
+        <p><strong>Email:</strong> <?= htmlspecialchars($order['email']) ?></p>
+        <p><strong>Payment Method:</strong> <?= htmlspecialchars($order['payment_method']) ?></p>
+        <p><strong>Shipping Status:</strong> <?= ucfirst(str_replace('_', ' ', htmlspecialchars($order['shipping_status']))) ?></p>
+        <p><strong>Tracking Number:</strong> <?= htmlspecialchars($order['tracking_number'] ?? 'N/A') ?></p>
+    </div>
+
+    <div class="shipping-info">
+        <h3>Shipping Address</h3>
+        <p><?= nl2br(htmlspecialchars($order['shipping_address'])) ?><br>
+           <?= htmlspecialchars($order['shipping_city']) ?>,
+           <?= htmlspecialchars($order['shipping_state']) ?> -
+           <?= htmlspecialchars($order['shipping_zip_code']) ?><br>
+           <strong>Phone:</strong> <?= htmlspecialchars($order['shipping_phone']) ?>
+        </p>
+    </div>
+
+    <h3>Order Items</h3>
+
+    <?php if (empty($items)): ?>
+        <p>No items found for this order.</p>
+    <?php else: ?>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Price</th>
+                    <th>Qty</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($items as $item): ?>
+                <tr>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <?php if (!empty($item['image'])): ?>
+                                <img src="../uploads/<?= htmlspecialchars($item['image']) ?>" alt="<?= htmlspecialchars($item['name']) ?>">
+                            <?php endif; ?>
+                            <?= htmlspecialchars($item['name']) ?>
+                        </div>
+                    </td>
+                    <td><?= CURRENCY_SYMBOL ?> <?= number_format($item['price'], 2) ?></td>
+                    <td><?= (int)$item['quantity'] ?></td>
+                    <td><?= CURRENCY_SYMBOL ?> <?= number_format($item['price'] * $item['quantity'], 2) ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    <?php endif; ?>
+
+    <div class="order-summary">
+        <div class="summary-row">
+            <span>Subtotal:</span>
+            <span><?= CURRENCY_SYMBOL ?> <?= number_format($order['total_price'], 2) ?></span>
+        </div>
+        <!-- Add shipping/tax here if you use those in future -->
+        <div class="summary-row summary-total">
+            <span>Total:</span>
+            <span><?= CURRENCY_SYMBOL ?> <?= number_format($order['total_price'], 2) ?></span>
+        </div>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <a href="update_order.php?id=<?= $order['id'] ?>" class="btn">Edit Order</a>
+        <a href="orders.php" class="btn back-link" style="background: #6c757d;">Back to Orders</a>
+    </div>
+</div>
+
 </body>
 </html>

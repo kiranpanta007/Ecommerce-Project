@@ -2,19 +2,21 @@
 session_start();
 require_once __DIR__ . '/../includes/db.php';
 
+// Check if admin is logged in
 if (!isset($_SESSION['admin_id'])) {
     header("Location: login.php");
     exit();
 }
 
+// Handle POST request to update order
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $order_id = (int)$_POST['order_id'];
-    $status = $_POST['status'];
-    $tracking_number = $_POST['tracking_number'] ?? null;
-    $shipping_status = $_POST['shipping_status'] ?? 'pending';
+    $order_id = (int) $_POST['order_id'];
+    $status = trim($_POST['status']);
+    $tracking_number = trim($_POST['tracking_number'] ?? '');
+    $shipping_status = trim($_POST['shipping_status'] ?? 'pending');
 
     try {
-        // Update order
+        // Update order in DB
         $stmt = $conn->prepare("
             UPDATE orders 
             SET status = ?, tracking_number = ?, shipping_status = ?
@@ -24,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute();
         $stmt->close();
 
-        // Fetch customer info
+        // Get user info
         $stmt = $conn->prepare("
             SELECT o.transaction_uuid, o.payment_method, u.username, u.email 
             FROM orders o 
@@ -39,53 +41,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $customer_name = $order_info['username'] ?? 'Customer';
         $customer_email = $order_info['email'] ?? '';
-        $payment_method = $order_info['payment_method'] ?? '';
-        $new_status = $status;
+        $payment_method = $order_info['payment_method'] ?? 'N/A';
 
+        // Send email notification
         if (!empty($customer_email)) {
-            // Prepare email
-            $to = $customer_email;
-            $subject = "Your Order #$order_id Status Update";
-
-            // Plain text message
+            $subject = "Update on Your Order #$order_id";
             $message = "Hi {$customer_name},\n\n";
-            $message .= "Your order #{$order_id} has been updated.\n\n";
-            $message .= "Order Status: {$new_status}\n";
-            $message .= "Shipping Status: {$shipping_status}\n";
-            $message .= "Payment Method: {$payment_method}\n\n";
-            $message .= "Thank you for shopping with us.";
+            $message .= "Your order (#{$order_id}) has been updated.\n\n";
+            $message .= "📝 Order Status: {$status}\n";
+            $message .= "📦 Shipping Status: {$shipping_status}\n";
+            $message .= "🔢 Tracking Number: {$tracking_number}\n";
+            $message .= "💳 Payment Method: {$payment_method}\n\n";
+            $message .= "Thank you for shopping with us!\nMeroShopping";
 
-            // Headers
             $headers = "From: MeroShopping <kiranpanta9846@gmail.com>\r\n";
-$headers .= "Reply-To: kiranpanta9846@gmail.com\r\n";
-
+            $headers .= "Reply-To: kiranpanta9846@gmail.com\r\n";
             $headers .= "X-Mailer: PHP/" . phpversion();
 
-            // Send email
-            if (!mail($to, $subject, $message, $headers)) {
-                error_log("Email sending failed to $to");
+            if (!mail($customer_email, $subject, $message, $headers)) {
+                error_log("Failed to send email to $customer_email");
             }
         }
 
-        $_SESSION['success'] = "Order updated and email sent successfully.";
+        $_SESSION['success'] = "Order updated successfully.";
         header("Location: order_details.php?id=$order_id");
         exit();
     } catch (Exception $e) {
-        $_SESSION['error'] = "Error: " . $e->getMessage();
-        error_log("Order update/email error: " . $e->getMessage());
+        $_SESSION['error'] = "Something went wrong: " . $e->getMessage();
+        error_log("Order update error: " . $e->getMessage());
         header("Location: order_details.php?id=$order_id");
         exit();
     }
 }
 
-// GET request to load order details below...
-
+// Handle GET request to load order data
 if (!isset($_GET['id'])) {
     header("Location: orders.php");
     exit();
 }
 
-$order_id = (int)$_GET['id'];
+$order_id = (int) $_GET['id'];
+
 try {
     $stmt = $conn->prepare("SELECT * FROM orders WHERE id = ?");
     $stmt->bind_param("i", $order_id);
@@ -94,12 +90,13 @@ try {
     $stmt->close();
 
     if (!$order) {
-        throw new Exception("Order not found");
+        throw new Exception("Order not found.");
     }
 } catch (Exception $e) {
     die("Error: " . $e->getMessage());
 }
 ?>
+
 
 
 <!DOCTYPE html>
@@ -148,23 +145,27 @@ try {
 <?php include 'admin_header.php'; ?>
 
 <div class="update-order-container">
-    <h1>Update Order #<?= $order['id'] ?></h1>
+    <h1>Update Order #<?= htmlspecialchars($order['id']) ?></h1>
 
     <?php if (isset($_SESSION['error'])): ?>
-        <div style="color: red; margin-bottom: 15px;"><?= $_SESSION['error'] ?></div>
-        <?php unset($_SESSION['error']); ?>
+        <div style="color: red; font-weight: 600;"><?= $_SESSION['error']; unset($_SESSION['error']); ?></div>
+    <?php elseif (isset($_SESSION['success'])): ?>
+        <div style="color: green; font-weight: 600;"><?= $_SESSION['success']; unset($_SESSION['success']); ?></div>
     <?php endif; ?>
 
     <form method="POST">
-        <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
+        <input type="hidden" name="order_id" value="<?= htmlspecialchars($order['id']) ?>">
 
         <div class="form-group">
             <label for="status">Order Status</label>
             <select id="status" name="status" required>
-                <option value="pending" <?= $order['status'] === 'pending' ? 'selected' : '' ?>>Pending</option>
-                <option value="processing" <?= $order['status'] === 'processing' ? 'selected' : '' ?>>Processing</option>
-                <option value="completed" <?= $order['status'] === 'completed' ? 'selected' : '' ?>>Completed</option>
-                <option value="cancelled" <?= $order['status'] === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
+                <?php
+                $statuses = ['pending', 'processing', 'completed', 'cancelled'];
+                foreach ($statuses as $s) {
+                    $selected = ($order['status'] === $s) ? 'selected' : '';
+                    echo "<option value=\"$s\" $selected>" . ucfirst($s) . "</option>";
+                }
+                ?>
             </select>
         </div>
 
@@ -177,16 +178,20 @@ try {
         <div class="form-group">
             <label for="shipping_status">Shipping Status</label>
             <select id="shipping_status" name="shipping_status" required>
-                <option value="pending" <?= $order['shipping_status'] === 'pending' ? 'selected' : '' ?>>Pending</option>
-                <option value="shipped" <?= $order['shipping_status'] === 'shipped' ? 'selected' : '' ?>>Shipped</option>
-                <option value="in_transit" <?= $order['shipping_status'] === 'in_transit' ? 'selected' : '' ?>>In Transit</option>
-                <option value="delivered" <?= $order['shipping_status'] === 'delivered' ? 'selected' : '' ?>>Delivered</option>
+                <?php
+                $shipping_statuses = ['pending', 'shipped', 'in_transit', 'delivered'];
+                foreach ($shipping_statuses as $status_option) {
+                    $selected = ($order['shipping_status'] === $status_option) ? 'selected' : '';
+                    echo "<option value=\"$status_option\" $selected>" . ucfirst(str_replace('_', ' ', $status_option)) . "</option>";
+                }
+                ?>
             </select>
         </div>
 
         <button type="submit" class="btn">Update Order</button>
-        <a href="order_details.php?id=<?= $order['id'] ?>" style="margin-left: 10px;">Cancel</a>
+        <a href="order_details.php?id=<?= htmlspecialchars($order['id']) ?>" style="margin-left: 10px;">Cancel</a>
     </form>
+</div>
 </div>
 </body>
 </html>

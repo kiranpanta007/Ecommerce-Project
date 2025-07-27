@@ -25,7 +25,6 @@ $total_orders = 0;
 $total_pages = 1;
 
 try {
-    // Count total (adjust for search)
     if (!empty($search)) {
         $countStmt = $conn->prepare("
             SELECT COUNT(*) FROM orders o
@@ -40,49 +39,58 @@ try {
         $total_orders = (int)$conn->query("SELECT COUNT(*) FROM orders")->fetch_row()[0];
     }
     $total_pages = max(1, (int)ceil($total_orders / ORDERS_PER_PAGE));
+if (!empty($search)) {
+    $sql = "
+        SELECT o.id, o.user_id,
+               CASE 
+                   WHEN u.name IS NOT NULL AND u.name <> '' THEN u.name
+                   WHEN u.username IS NULL OR u.username = '' THEN 'Guest' 
+                   ELSE u.username 
+               END AS customer_name,
+               COALESCE(u.email, 'N/A') AS email,
+               o.order_date,
+               COALESCE(o.total_price, 0) AS total_amount,
+               COALESCE(o.status, 'pending') AS status,
+               o.payment_method,
+               o.shipping_status,
+               o.transaction_uuid
+        FROM orders o
+        LEFT JOIN users u ON o.user_id = u.id
+        WHERE
+            o.id LIKE ? OR
+            u.username LIKE ? OR
+            u.email LIKE ? OR
+            o.transaction_uuid LIKE ?
+        ORDER BY o.order_date DESC
+        LIMIT ?, ?
+    ";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param('ssssii', $search_param, $search_param, $search_param, $search_param, $start, $limit);
+} else {
+    $sql = "
+        SELECT o.id, o.user_id,
+               CASE 
+                   WHEN u.name IS NOT NULL AND u.name <> '' THEN u.name
+                   WHEN u.username IS NULL OR u.username = '' THEN 'Guest' 
+                   ELSE u.username 
+               END AS customer_name,
+               COALESCE(u.email, 'N/A') AS email,
+               o.order_date,
+               COALESCE(o.total_price, 0) AS total_amount,
+               COALESCE(o.status, 'pending') AS status,
+               o.payment_method,
+               o.shipping_status,
+               o.transaction_uuid
+        FROM orders o
+        LEFT JOIN users u ON o.user_id = u.id
+        ORDER BY o.order_date DESC
+        LIMIT ?, ?
+    ";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param('ii', $start, $limit);
+}
 
-    if (!empty($search)) {
-        $sql = "
-            SELECT o.id, o.user_id,
-                   COALESCE(u.username, 'Guest') AS username,
-                   COALESCE(u.email, 'N/A') AS email,
-                   o.order_date,
-                   COALESCE(o.total_price, 0) AS total_amount,
-                   COALESCE(o.status, 'pending') AS status,
-                   o.payment_method,
-                   o.shipping_status,
-                   o.transaction_uuid
-            FROM orders o
-            LEFT JOIN users u ON o.user_id = u.id
-            WHERE
-                o.id LIKE ? OR
-                u.username LIKE ? OR
-                u.email LIKE ? OR
-                o.transaction_uuid LIKE ?
-            ORDER BY o.order_date DESC
-            LIMIT ?, ?
-        ";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param('ssssii', $search_param, $search_param, $search_param, $search_param, $start, $limit);
-    } else {
-        $sql = "
-            SELECT o.id, o.user_id,
-                   COALESCE(u.username, 'Guest') AS username,
-                   COALESCE(u.email, 'N/A') AS email,
-                   o.order_date,
-                   COALESCE(o.total_price, 0) AS total_amount,
-                   COALESCE(o.status, 'pending') AS status,
-                   o.payment_method,
-                   o.shipping_status,
-                   o.transaction_uuid
-            FROM orders o
-            LEFT JOIN users u ON o.user_id = u.id
-            ORDER BY o.order_date DESC
-            LIMIT ?, ?
-        ";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param('ii', $start, $limit);
-    }
+
 
     if ($stmt && $stmt->execute()) {
         $result = $stmt->get_result();
@@ -100,567 +108,482 @@ try {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Manage Orders | Admin Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-   <style>
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --primary-light: #a5b4fc;
-            --success: #10b981;
-            --danger: #ef4444;
-            --warning: #f59e0b;
-            --info: #3b82f6;
-            --dark: #1e293b;
-            --light: #f8fafc;
-            --gray-100: #f1f5f9;
-            --gray-200: #e2e8f0;
-            --gray-300: #cbd5e1;
-            --gray-400: #94a3b8;
-            --gray-500: #64748b;
-            --gray-600: #475569;
-            --gray-700: #334155;
-            --gray-800: #1e293b;
-            --gray-900: #0f172a;
-            --card-bg: rgba(255, 255, 255, 0.98);
-            --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-            --sidebar-width: 280px;
-            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Manage Orders | Admin Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<style>
+  :root {
+    --color-primary: #5c6ac4;
+    --color-primary-light: #8a98f8;
+    --color-success: #3ac47d;
+    --color-warning: #ffb822;
+    --color-danger: #f65058;
+    --color-info: #17a2b8;
+    --color-bg: #f9fafc;
+    --color-white: #fff;
+    --color-text: #333;
+    --color-text-light: #666;
+    --shadow: 0 4px 8px rgba(0,0,0,0.05);
+    --border-radius: 8px;
+    --transition: 0.3s ease;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    margin: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  /* Sidebar */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 260px;
+    height: 100vh;
+    background: var(--color-white);
+    box-shadow: var(--shadow);
+    padding: 2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    transition: transform var(--transition);
+    z-index: 100;
+  }
+  .sidebar.collapsed {
+    transform: translateX(-100%);
+  }
+  .sidebar-header {
+    font-weight: 700;
+    font-size: 1.5rem;
+    color: var(--color-primary);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .sidebar-header i {
+    font-size: 1.8rem;
+  }
+  .sidebar small {
+    color: var(--color-text-light);
+    margin-bottom: 2rem;
+    font-size: 0.875rem;
+  }
+  nav.sidebar-nav {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .nav-item a {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    text-decoration: none;
+    color: var(--color-text);
+    padding: 0.75rem 1rem;
+    border-radius: var(--border-radius);
+    font-weight: 600;
+    transition: background var(--transition), color var(--transition);
+  }
+  .nav-item a i {
+    min-width: 24px;
+    font-size: 1.2rem;
+  }
+  .nav-item.active a,
+  .nav-item a:hover {
+    background: var(--color-primary);
+    color: var(--color-white);
+  }
+  .nav-item.mt-auto {
+    margin-top: auto;
+  }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  /* Main Content */
+  main.main-content {
+    margin-left: 260px;
+    padding: 2rem 2.5rem;
+    transition: margin-left var(--transition);
+  }
+  main.main-content.collapsed {
+    margin-left: 0;
+  }
 
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--gray-100);
-            color: var(--gray-900);
-            line-height: 1.5;
-            overflow-x: hidden;
-        }
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .page-title h1 {
+    font-weight: 700;
+    font-size: 2rem;
+  }
+  .page-title p {
+    color: var(--color-text-light);
+    font-size: 1rem;
+  }
+  .user-avatar {
+    background: var(--color-primary);
+    color: white;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+    box-shadow: 0 0 6px var(--color-primary-light);
+    user-select: none;
+  }
 
-        /* Glassmorphism Sidebar */
-        .sidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: var(--sidebar-width);
-            height: 100vh;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-right: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 1.5rem 0;
-            z-index: 100;
-            box-shadow: var(--card-shadow);
-            transition: var(--transition);
-            display: flex;
-            flex-direction: column;
-        }
+  /* Orders container */
+  .orders-container {
+    background: var(--color-white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    padding: 1.5rem 2rem;
+  }
 
-        .sidebar-header {
-            padding: 0 1.5rem 1.5rem;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-            margin-bottom: 1rem;
-        }
+  /* Search and filter */
+  .search-filter {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .search-filter input,
+  .search-filter select {
+    flex-grow: 1;
+    padding: 0.6rem 1rem;
+    border: 1.5px solid #d2d6de;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+  .search-filter input:focus,
+  .search-filter select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 5px var(--color-primary-light);
+  }
+  /* Table */
+  table.order-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  thead tr {
+    background: #f0f4ff;
+  }
+  th, td {
+    padding: 1rem 1.25rem;
+    text-align: left;
+    border-bottom: 1px solid #e3e8ff;
+    font-size: 0.95rem;
+  }
+  th {
+    color: var(--color-primary);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  tbody tr:hover {
+    background: #f9faff;
+  }
+  .no-orders {
+    text-align: center;
+    color: var(--color-text-light);
+    padding: 2rem;
+    font-style: italic;
+  }
 
-        .sidebar-header h2 {
-            color: var(--primary);
-            font-size: 1.5rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
+  /* Status badges */
+  .status-pending {
+    color: #d97706;
+    font-weight: 700;
+  }
+  .status-processing {
+    color: var(--color-info);
+    font-weight: 700;
+  }
+  .status-completed {
+    color: var(--color-success);
+    font-weight: 700;
+  }
+  .status-cancelled {
+    color: var(--color-danger);
+    font-weight: 700;
+  }
 
-        .sidebar-header small {
-            color: var(--gray-500);
-            font-size: 0.875rem;
-            display: block;
-            margin-top: 0.25rem;
-        }
+  /* Pagination */
+  .pagination {
+    margin-top: 1.5rem;
+    text-align: right;
+  }
+  .pagination a,
+  .pagination span {
+    display: inline-block;
+    padding: 0.4rem 0.8rem;
+    margin-left: 0.25rem;
+    color: var(--color-primary);
+    font-weight: 600;
+    border-radius: var(--border-radius);
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    user-select: none;
+    transition: all var(--transition);
+    text-decoration: none;
+  }
+  .pagination a:hover {
+    background: var(--color-primary-light);
+    color: white;
+    border-color: var(--color-primary);
+  }
+  .pagination .current-page {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+    cursor: default;
+  }
 
-        .sidebar-nav {
-            padding: 0 1rem;
-            flex-grow: 1;
-            overflow-y: auto;
-        }
+  /* Responsive */
+  @media (max-width: 900px) {
+    .sidebar {
+      position: fixed;
+      z-index: 200;
+      transform: translateX(-100%);
+    }
+    .sidebar.open {
+      transform: translateX(0);
+    }
+    main.main-content {
+      margin-left: 0;
+      padding: 1.5rem 1rem;
+    }
+    .header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+  }
 
-        .nav-item {
-            margin-bottom: 0.5rem;
-            border-radius: 0.5rem;
-            transition: var(--transition);
-        }
+  /* Toggle button */
+  .sidebar-toggle {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    font-size: 1.3rem;
+    cursor: pointer;
+    display: none;
+    z-index: 300;
+    box-shadow: 0 0 8px var(--color-primary-light);
+  }
+  @media (max-width: 900px) {
+    .sidebar-toggle {
+      display: block;
+    }
+  }
 
-        .nav-item:hover {
-            background: rgba(99, 102, 241, 0.1);
-        }
-
-        .nav-item.active {
-            background: var(--primary);
-        }
-
-        .nav-item.active a {
-            color: white;
-        }
-
-        .nav-item a {
-            display: flex;
-            align-items: center;
-            padding: 0.75rem 1rem;
-            color: var(--gray-800);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.9375rem;
-            gap: 0.75rem;
-        }
-
-        .nav-item i {
-            font-size: 1.1rem;
-            width: 1.5rem;
-            text-align: center;
-        }
-
-        /* Main Content */
-        .main-content {
-            margin-left: var(--sidebar-width);
-            padding: 2rem;
-            transition: var(--transition);
-            min-height: 100vh;
-        }
-
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-
-        .page-title h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: var(--gray-900);
-            margin-bottom: 0.25rem;
-        }
-
-        .page-title p {
-            color: var(--gray-500);
-            font-size: 0.9375rem;
-        }
-
-        .user-avatar {
-            width: 2.5rem;
-            height: 2.5rem;
-            border-radius: 50%;
-            background-color: var(--primary);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 600;
-            cursor: pointer;
-            transition: var(--transition);
-            flex-shrink: 0;
-        }
-
-        .user-avatar:hover {
-            transform: scale(1.05);
-            box-shadow: 0 0 0 3px var(--primary-light);
-        }
-
-        /* Orders Container */
-        .orders-container {
-            background: var(--card-bg);
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            box-shadow: var(--card-shadow);
-            border: 1px solid rgba(0, 0, 0, 0.03);
-        }
-
-        .search-filter {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .search-filter input, 
-        .search-filter select {
-            padding: 0.5rem 1rem;
-            border: 1px solid var(--gray-200);
-            border-radius: 0.5rem;
-            font-size: 0.875rem;
-            transition: var(--transition);
-        }
-
-        .search-filter input:focus, 
-        .search-filter select:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px var(--primary-light);
-        }
-
-        /* Order Table */
-        .order-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1.5rem;
-        }
-
-        .order-table th, 
-        .order-table td {
-            padding: 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-        .order-table th {
-            background-color: var(--gray-100);
-            color: var(--gray-600);
-            text-transform: uppercase;
-            font-size: 0.75rem;
-            letter-spacing: 0.5px;
-            font-weight: 600;
-        }
-
-        .order-table tr:hover {
-            background-color: var(--gray-100);
-        }
-
-        /* Status Badges */
-        .status-pending {
-            color: var(--warning);
-            font-weight: 600;
-        }
-
-        .status-processing {
-            color: var(--info);
-            font-weight: 600;
-        }
-
-        .status-completed {
-            color: var(--success);
-            font-weight: 600;
-        }
-
-        .status-cancelled {
-            color: var(--danger);
-            font-weight: 600;
-        }
-
-        /* Action Buttons */
-        .action-btn {
-            padding: 0.375rem 0.75rem;
-            border-radius: 0.375rem;
-            font-size: 0.75rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: var(--transition);
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            text-decoration: none;
-        }
-
-        .view-btn {
-            background-color: var(--info);
-            color: white;
-        }
-
-        .view-btn:hover {
-            background-color: #1d4ed8;
-        }
-
-        .update-btn {
-            background-color: var(--warning);
-            color: var(--gray-900);
-        }
-
-        .update-btn:hover {
-            background-color: #d97706;
-        }
-
-        /* Pagination */
-        .pagination {
-            display: flex;
-            justify-content: center;
-            margin-top: 2rem;
-            gap: 0.5rem;
-        }
-
-        .pagination a {
-            padding: 0.5rem 1rem;
-            border: 1px solid var(--gray-200);
-            border-radius: 0.375rem;
-            text-decoration: none;
-            color: var(--gray-700);
-            transition: var(--transition);
-        }
-
-        .pagination a.active {
-            background-color: var(--primary);
-            color: white;
-            border-color: var(--primary);
-        }
-
-        .pagination a:hover:not(.active) {
-            background-color: var(--gray-100);
-        }
-
-        /* Error Message */
-        .error-message {
-            color: var(--danger);
-            padding: 1rem;
-            background-color: rgba(239, 68, 68, 0.1);
-            border-radius: 0.5rem;
-            margin-bottom: 1.5rem;
-        }
-
-        /* No Orders */
-        .no-orders {
-            text-align: center;
-            padding: 2rem;
-            color: var(--gray-500);
-        }
-
-        /* Mobile Responsive */
-        @media (max-width: 992px) {
-            .sidebar {
-                transform: translateX(-100%);
-            }
-            .sidebar.active {
-                transform: translateX(0);
-            }
-            .main-content {
-                margin-left: 0;
-            }
-            .menu-toggle {
-                display: flex;
-            }
-        }
-    </style>
+  /* Button inside table */
+  .btn-view {
+    background: var(--color-primary);
+    color: white;
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--border-radius);
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: background var(--transition);
+  }
+  .btn-view:hover {
+    background: var(--color-primary-light);
+  }
+</style>
 </head>
 <body>
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <h2><i class="fas fa-store"></i> MeroShopping</h2>
-            <small>Admin Dashboard</small>
-        </div>
-        <nav class="sidebar-nav" aria-label="Main navigation">
-            <div class="nav-item">
-                <a href="dashboard.php" role="menuitem">
-                    <i class="fas fa-tachometer-alt"></i>
-                    <span>Dashboard</span>
-                </a>
-            </div>
-            <div class="nav-item">
-                <a href="products.php" role="menuitem">
-                    <i class="fas fa-box-open"></i>
-                    <span>Products</span>
-                </a>
-            </div>
-            <div class="nav-item active">
-                <a href="orders.php" role="menuitem">
-                    <i class="fas fa-shopping-bag"></i>
-                    <span>Orders</span>
-                </a>
-            </div>
-            <div class="nav-item">
-                <a href="customers.php" role="menuitem">
-                    <i class="fas fa-users"></i>
-                    <span>Customers</span>
-                </a>
-            </div>
-            <div class="nav-item mt-auto">
-                <a href="logout.php" role="menuitem">
-                    <i class="fas fa-sign-out-alt"></i>
-                    <span>Logout</span>
-                </a>
-            </div>
-        </nav>
-    </aside>
 
-    <!-- Main Content -->
-    <main class="main-content">
-        <div class="header">
-            <div class="page-title">
-                <h1>Order Management</h1>
-                <p>View and manage customer orders</p>
-            </div>
-            <div class="user-avatar" title="<?= isset($_SESSION['admin_name']) ? htmlspecialchars($_SESSION['admin_name']) : 'Admin' ?>">
-                <?php
-                $initial = $_SESSION['admin_name'] ?? 'A';
-                $initial = htmlspecialchars($initial);
-                $initial = mb_substr($initial, 0, 1);
-                echo strtoupper($initial);
-                ?>
-            </div>
-        </div>
+<button class="sidebar-toggle" aria-label="Toggle sidebar"><i class="fa fa-bars"></i></button>
 
-        <div class="orders-container">
-            <?php if (isset($error_message)): ?>
-                <div class="error-message"><?= htmlspecialchars($error_message) ?></div>
-            <?php endif; ?>
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <i class="fa fa-cogs"></i> Admin Panel
+  </div>
+  <small>Manage Orders and More</small>
+  <nav class="sidebar-nav" role="navigation" aria-label="Admin navigation">
+    <div class="nav-item"><a href="dashboard.php"><i class="fa fa-home"></i> Dashboard</a></div>
+    <div class="nav-item active"><a href="#"><i class="fa fa-shopping-cart"></i> Orders</a></div>
+    <div class="nav-item"><a href="products.php"><i class="fa fa-box"></i> Products</a></div>
+    <div class="nav-item"><a href="customers.php"><i class="fa fa-users"></i> customers</a></div>
+    <div class="nav-item mt-auto"><a href="logout.php"><i class="fa fa-sign-out-alt"></i> Logout</a></div>
+  </nav>
+</aside>
 
-            <div class="search-filter">
-                <input type="text" id="search-input" placeholder="Search by order ID or customer" aria-label="Search orders" />
-                <select id="status-filter" aria-label="Filter orders by status">
-                    <option value="">All Statuses</option>
-                    <option value="pending">Pending</option>
-                    <option value="processing">Processing</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                </select>
-            </div>
+<main class="main-content" id="mainContent" role="main" tabindex="-1">
 
-            <table class="order-table" aria-describedby="order-list">
-                <thead>
-                    <tr>
-                        <th scope="col">Order ID</th>
-                        <th scope="col">Customer</th>
-                        <th scope="col">Date</th>
-                        <th scope="col">Amount</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (empty($orders)): ?>
-                        <tr>
-                            <td colspan="6" class="no-orders">No orders found</td>
-                        </tr>
-                    <?php else: ?>
-                        <?php foreach ($orders as $order): ?>
-                        <tr>
-                            <td>#<?= htmlspecialchars($order['id']) ?></td>
-                            <td>
-                                <?= htmlspecialchars($order['username']) ?><br />
-                                <small><?= htmlspecialchars($order['email']) ?></small>
-                            </td>
-                            <td><?= isset($order['order_date']) ? date('M d, Y h:i A', strtotime($order['order_date'])) : 'N/A' ?></td>
-                            <td><?= CURRENCY_SYMBOL ?> <?= number_format($order['total_amount'], 2) ?></td>
-                            <td>
-                                <span class="status-<?= htmlspecialchars(strtolower($order['status'])) ?>">
-                                    <?= ucfirst(htmlspecialchars($order['status'])) ?>
-                                </span>
-                            </td>
-                            <td>
-                                <a href="order_details.php?id=<?= urlencode($order['id']) ?>" class="action-btn view-btn" aria-label="View order #<?= htmlspecialchars($order['id']) ?>">
-                                    <i class="fas fa-eye"></i> View
-                                </a>
-                                <a href="update_order.php?id=<?= urlencode($order['id']) ?>" class="action-btn update-btn" aria-label="Update order #<?= htmlspecialchars($order['id']) ?>">
-                                    <i class="fas fa-edit"></i> Update
-                                </a>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+  <header class="header">
+    <div class="page-title">
+      <h1>Orders</h1>
+      <p>Manage all customer orders efficiently</p>
+    </div>
+    <div class="user-avatar" aria-label="Admin user initial">A</div>
+  </header>
 
-            <?php if ($total_pages > 1): ?>
-            <nav class="pagination" aria-label="Pagination">
-                <?php if ($page > 1): ?>
-                    <a href="orders.php?page=<?= $page - 1 ?>" aria-label="Previous page">&laquo;</a>
-                <?php endif; ?>
+  <section class="orders-container" aria-labelledby="ordersHeading">
+  <h2 id="ordersHeading" class="sr-only">Orders List</h2>
 
-                <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                    <a href="orders.php?page=<?= $i ?>" <?= ($i === $page) ? 'class="active" aria-current="page"' : '' ?>>
-                        <?= $i ?>
-                    </a>
-                <?php endfor; ?>
+  <form method="get" action="" class="search-filter" role="search" aria-label="Search and filter orders">
+    <input
+      type="search"
+      name="search"
+      placeholder="Search orders, usernames, emails, transaction IDs..."
+      aria-label="Search orders"
+      value="<?= htmlspecialchars($search) ?>"
+      id="searchInput"
+      autocomplete="off"
+    />
+    <button type="submit" class="btn-view" aria-label="Search orders"><i class="fa fa-search"></i></button>
+  </form>
 
-                <?php if ($page < $total_pages): ?>
-                    <a href="orders.php?page=<?= $page + 1 ?>" aria-label="Next page">&raquo;</a>
-                <?php endif; ?>
-            </nav>
-            <?php endif; ?>
-        </div>
-    </main>
+  <!-- Create Order button added here -->
+  <a href="edit_order.php" class="btn-view" style="background-color: #007bff; margin: 1rem 0; display: inline-block;">
+    + Create Order
+  </a>
 
-    <script>
-        // Mobile menu toggle
-        document.addEventListener('DOMContentLoaded', function () {
-            const menuToggle = document.createElement('button');
-            menuToggle.innerHTML = '<i class="fas fa-bars"></i>';
-            menuToggle.style.position = 'fixed';
-            menuToggle.style.top = '10px';
-            menuToggle.style.left = '10px';
-            menuToggle.style.background = 'var(--primary)';
-            menuToggle.style.color = 'white';
-            menuToggle.style.border = 'none';
-            menuToggle.style.borderRadius = '50%';
-            menuToggle.style.width = '40px';
-            menuToggle.style.height = '40px';
-            menuToggle.style.display = 'none';
-            menuToggle.style.zIndex = '1000';
-            menuToggle.style.cursor = 'pointer';
-            menuToggle.setAttribute('aria-label', 'Toggle menu');
-            document.body.appendChild(menuToggle);
+  <?php if (!empty($error_message)): ?>
+    <p class="no-orders" role="alert"><?= htmlspecialchars($error_message) ?></p>
+  <?php elseif (count($orders) === 0): ?>
+    <p class="no-orders">No orders found.</p>
+  <?php else: ?>
+    <table class="order-table" aria-describedby="ordersHeading">
+      <thead>
+        <tr>
+          <th scope="col">Order ID</th>
+          <th scope="col">User</th>
+          <th scope="col">Email</th>
+          <th scope="col">Order Date</th>
+          <th scope="col">Amount</th>
+          <th scope="col">Status</th>
+          <th scope="col">Payment</th>
+          <th scope="col">Shipping</th>
+          <th scope="col">Transaction ID</th>
+          <th scope="col" aria-label="Actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($orders as $order): ?>
+        <tr>
+          <td>#<?= htmlspecialchars($order['id']) ?></td>
+          <td><?= htmlspecialchars($order['customer_name']) ?></td>
+          <td><?= htmlspecialchars($order['email']) ?></td>
+          <td><?= date('M d, Y', strtotime($order['order_date'])) ?></td>
+          <td><?= CURRENCY_SYMBOL . ' ' . number_format($order['total_amount'], 2) ?></td>
+          <td class="status-<?= strtolower($order['status']) ?>"><?= ucfirst(htmlspecialchars($order['status'])) ?></td>
+          <td><?= htmlspecialchars($order['payment_method']) ?></td>
+          <td><?= htmlspecialchars($order['shipping_status']) ?></td>
+          <td><?= htmlspecialchars($order['transaction_uuid']) ?></td>
+          <td>
+            <a
+              class="btn-view"
+              href="view_order.php?id=<?= urlencode($order['id']) ?>"
+              aria-label="View details for order #<?= htmlspecialchars($order['id']) ?>"
+            >
+              View
+            </a>
 
-            const sidebar = document.querySelector('.sidebar');
+            <!-- Edit button added here -->
+            <a
+              class="btn-view"
+              href="edit_order.php?id=<?= urlencode($order['id']) ?>"
+              aria-label="Edit order #<?= htmlspecialchars($order['id']) ?>"
+              style="background-color: #28a745; margin-left: 8px;"
+            >
+              Edit
+            </a>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
 
-            function checkMobile() {
-                if (window.innerWidth <= 992) {
-                    menuToggle.style.display = 'flex';
-                    sidebar.style.display = 'none';
-                } else {
-                    menuToggle.style.display = 'none';
-                    sidebar.style.display = 'block';
-                }
-            }
+    <nav aria-label="Pagination" class="pagination" role="navigation">
+      <?php if ($page > 1): ?>
+        <a href="?page=<?= $page-1 ?>&search=<?= urlencode($search) ?>" aria-label="Previous page">&laquo;</a>
+      <?php endif; ?>
 
-            menuToggle.addEventListener('click', function () {
-                sidebar.style.display = sidebar.style.display === 'none' ? 'block' : 'none';
-            });
+      <?php
+      $startPage = max(1, $page - 2);
+      $endPage = min($total_pages, $page + 2);
 
-            window.addEventListener('resize', checkMobile);
-            checkMobile();
-        });
+      if ($startPage > 1) {
+        echo '<a href="?page=1&search=' . urlencode($search) . '">1</a>';
+        if ($startPage > 2) echo '<span>...</span>';
+      }
 
-        // Live search functionality
-        document.getElementById('search-input').addEventListener('input', function () {
-            const searchTerm = this.value.toLowerCase();
-            const rows = document.querySelectorAll('.order-table tbody tr');
+      for ($i = $startPage; $i <= $endPage; $i++) {
+        if ($i == $page) {
+          echo '<span class="current-page">' . $i . '</span>';
+        } else {
+          echo '<a href="?page=' . $i . '&search=' . urlencode($search) . '">' . $i . '</a>';
+        }
+      }
 
-            rows.forEach(row => {
-                if (row.classList.contains('no-orders')) return;
+      if ($endPage < $total_pages) {
+        if ($endPage < $total_pages - 1) echo '<span>...</span>';
+        echo '<a href="?page=' . $total_pages . '&search=' . urlencode($search) . '">' . $total_pages . '</a>';
+      }
+      ?>
 
-                const orderId = row.cells[0].textContent.toLowerCase();
-                const customer = row.cells[1].textContent.toLowerCase();
+      <?php if ($page < $total_pages): ?>
+        <a href="?page=<?= $page+1 ?>&search=<?= urlencode($search) ?>" aria-label="Next page">&raquo;</a>
+      <?php endif; ?>
+    </nav>
+  <?php endif; ?>
+</section>
 
-                if (orderId.includes(searchTerm) || customer.includes(searchTerm)) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-        });
+</main>
 
-        // Status filter functionality
-        document.getElementById('status-filter').addEventListener('change', function () {
-            const status = this.value.toLowerCase();
-            const rows = document.querySelectorAll('.order-table tbody tr');
+<script>
+  const sidebar = document.getElementById('sidebar');
+  const mainContent = document.getElementById('mainContent');
+  const toggleBtn = document.querySelector('.sidebar-toggle');
 
-            rows.forEach(row => {
-                if (row.classList.contains('no-orders')) return;
+  toggleBtn.addEventListener('click', () => {
+    sidebar.classList.toggle('open');
+  });
 
-                const statusCell = row.cells[4].textContent.toLowerCase();
+  // Close sidebar when clicking outside on small screens
+  document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 900) {
+      if (!sidebar.contains(e.target) && !toggleBtn.contains(e.target)) {
+        sidebar.classList.remove('open');
+      }
+    }
+  });
 
-                if (status === '' || statusCell === status) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-        });
-    </script>
+  // Keyboard accessibility: close sidebar with ESC
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && sidebar.classList.contains('open')) {
+      sidebar.classList.remove('open');
+      toggleBtn.focus();
+    }
+  });
+</script>
+
 </body>
 </html>

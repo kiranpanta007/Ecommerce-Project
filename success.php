@@ -106,12 +106,12 @@ if ($stmt->affected_rows > 0) {
             $mail->isSMTP();
             $mail->Host       = 'smtp.gmail.com';
             $mail->SMTPAuth   = true;
-            $mail->Username   = 'your_email@gmail.com';        // Your SMTP email
-            $mail->Password   = 'your_app_password';           // Your SMTP password or app password
+            $mail->Username   = 'kiranpanta9846@gmail.com';        // Your SMTP email
+            $mail->Password   = 'gqaoprdghaxuymat';           // Your SMTP password or app password
             $mail->SMTPSecure = 'tls';
             $mail->Port       = 587;
 
-            $mail->setFrom('your_email@gmail.com', 'Your Store Name');
+            $mail->setFrom('kiranpanta9846@gmail.com', 'Your Store Name');
             $mail->addAddress($user_email, $user_name ?: '');
 
             $mail->isHTML(true);
