@@ -2,83 +2,110 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-// Start session only if not already active
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
+if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/../includes/db.php';
 
-// Redirect if not admin
 if (!isset($_SESSION['admin_logged_in'])) {
     header("Location: login.php");
     exit();
 }
 
-// Define constants if not already defined
-if (!defined('CURRENCY_SYMBOL')) {
-    define('CURRENCY_SYMBOL', 'NRS');
-}
-if (!defined('ORDERS_PER_PAGE')) {
-    define('ORDERS_PER_PAGE', 10);
-}
+if (!defined('CURRENCY_SYMBOL')) define('CURRENCY_SYMBOL', 'NRS');
+if (!defined('ORDERS_PER_PAGE')) define('ORDERS_PER_PAGE', 10);
 
-// Pagination setup
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$page = max(1, $page); // Ensure page is at least 1
+$page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $start = ($page - 1) * ORDERS_PER_PAGE;
+$limit = ORDERS_PER_PAGE;
 
-// Initialize variables
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+$search_param = '%' . $search . '%';
+
 $orders = [];
 $total_orders = 0;
 $total_pages = 1;
 
 try {
-    // Get total orders count
-    $total_stmt = $conn->query("SELECT COUNT(*) FROM orders");
-    $total_orders = $total_stmt ? $total_stmt->fetch_row()[0] : 0;
-    $total_pages = ceil($total_orders / ORDERS_PER_PAGE);
+    // Count total (adjust for search)
+    if (!empty($search)) {
+        $countStmt = $conn->prepare("
+            SELECT COUNT(*) FROM orders o
+            LEFT JOIN users u ON o.user_id = u.id
+            WHERE o.id LIKE ? OR u.username LIKE ? OR u.email LIKE ? OR o.transaction_uuid LIKE ?
+        ");
+        $countStmt->bind_param('ssss', $search_param, $search_param, $search_param, $search_param);
+        $countStmt->execute();
+        $total_orders = (int)$countStmt->get_result()->fetch_row()[0];
+        $countStmt->close();
+    } else {
+        $total_orders = (int)$conn->query("SELECT COUNT(*) FROM orders")->fetch_row()[0];
+    }
+    $total_pages = max(1, (int)ceil($total_orders / ORDERS_PER_PAGE));
 
-    // Get orders data with user information
-    $stmt = $conn->prepare("
-        SELECT 
-            o.id, 
-            o.user_id, 
-            COALESCE(u.username, 'Guest') AS username,
-            COALESCE(u.email, 'N/A') AS email,
-            o.order_date, 
-            COALESCE(o.total_price, 0) AS total_amount, 
-            COALESCE(o.status, 'pending') AS status
-        FROM orders o
-        LEFT JOIN users u ON o.user_id = u.id
-        ORDER BY o.order_date DESC
-        LIMIT ?, ?
-    ");
-    
-    if ($stmt) {
-        // Create variables to pass by reference
-        $bind_start = $start;
-        $bind_per_page = ORDERS_PER_PAGE;
-        $stmt->bind_param("ii", $bind_start, $bind_per_page);
-        $stmt->execute();
+    if (!empty($search)) {
+        $sql = "
+            SELECT o.id, o.user_id,
+                   COALESCE(u.username, 'Guest') AS username,
+                   COALESCE(u.email, 'N/A') AS email,
+                   o.order_date,
+                   COALESCE(o.total_price, 0) AS total_amount,
+                   COALESCE(o.status, 'pending') AS status,
+                   o.payment_method,
+                   o.shipping_status,
+                   o.transaction_uuid
+            FROM orders o
+            LEFT JOIN users u ON o.user_id = u.id
+            WHERE
+                o.id LIKE ? OR
+                u.username LIKE ? OR
+                u.email LIKE ? OR
+                o.transaction_uuid LIKE ?
+            ORDER BY o.order_date DESC
+            LIMIT ?, ?
+        ";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param('ssssii', $search_param, $search_param, $search_param, $search_param, $start, $limit);
+    } else {
+        $sql = "
+            SELECT o.id, o.user_id,
+                   COALESCE(u.username, 'Guest') AS username,
+                   COALESCE(u.email, 'N/A') AS email,
+                   o.order_date,
+                   COALESCE(o.total_price, 0) AS total_amount,
+                   COALESCE(o.status, 'pending') AS status,
+                   o.payment_method,
+                   o.shipping_status,
+                   o.transaction_uuid
+            FROM orders o
+            LEFT JOIN users u ON o.user_id = u.id
+            ORDER BY o.order_date DESC
+            LIMIT ?, ?
+        ";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param('ii', $start, $limit);
+    }
+
+    if ($stmt && $stmt->execute()) {
         $result = $stmt->get_result();
-        $orders = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+        $orders = $result->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+    } else {
+        error_log("Order fetch error: " . $conn->error);
+        $error_message = "Error loading orders.";
     }
 } catch (Exception $e) {
-    error_log("Order fetch error: " . $e->getMessage());
-    $error_message = "Error loading orders. Please try again later.";
+    error_log("Exception: " . $e->getMessage());
+    $error_message = "An unexpected error occurred.";
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Manage Orders | Admin Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+   <style>
         :root {
             --primary: #6366f1;
             --primary-dark: #4f46e5;
@@ -467,11 +494,11 @@ try {
                 <h1>Order Management</h1>
                 <p>View and manage customer orders</p>
             </div>
-            <div class="user-avatar">
+            <div class="user-avatar" title="<?= isset($_SESSION['admin_name']) ? htmlspecialchars($_SESSION['admin_name']) : 'Admin' ?>">
                 <?php
                 $initial = $_SESSION['admin_name'] ?? 'A';
                 $initial = htmlspecialchars($initial);
-                $initial = substr($initial, 0, 1);
+                $initial = mb_substr($initial, 0, 1);
                 echo strtoupper($initial);
                 ?>
             </div>
@@ -481,10 +508,10 @@ try {
             <?php if (isset($error_message)): ?>
                 <div class="error-message"><?= htmlspecialchars($error_message) ?></div>
             <?php endif; ?>
-            
+
             <div class="search-filter">
-                <input type="text" id="search-input" placeholder="Search by order ID or customer">
-                <select id="status-filter">
+                <input type="text" id="search-input" placeholder="Search by order ID or customer" aria-label="Search orders" />
+                <select id="status-filter" aria-label="Filter orders by status">
                     <option value="">All Statuses</option>
                     <option value="pending">Pending</option>
                     <option value="processing">Processing</option>
@@ -493,15 +520,15 @@ try {
                 </select>
             </div>
 
-            <table class="order-table">
+            <table class="order-table" aria-describedby="order-list">
                 <thead>
                     <tr>
-                        <th>Order ID</th>
-                        <th>Customer</th>
-                        <th>Date</th>
-                        <th>Amount</th>
-                        <th>Status</th>
-                        <th>Actions</th>
+                        <th scope="col">Order ID</th>
+                        <th scope="col">Customer</th>
+                        <th scope="col">Date</th>
+                        <th scope="col">Amount</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -512,23 +539,23 @@ try {
                     <?php else: ?>
                         <?php foreach ($orders as $order): ?>
                         <tr>
-                            <td>#<?= htmlspecialchars($order['id'] ?? 'N/A') ?></td>
+                            <td>#<?= htmlspecialchars($order['id']) ?></td>
                             <td>
-                                <?= htmlspecialchars($order['username'] ?? 'Guest') ?><br>
-                                <small><?= htmlspecialchars($order['email'] ?? 'N/A') ?></small>
+                                <?= htmlspecialchars($order['username']) ?><br />
+                                <small><?= htmlspecialchars($order['email']) ?></small>
                             </td>
                             <td><?= isset($order['order_date']) ? date('M d, Y h:i A', strtotime($order['order_date'])) : 'N/A' ?></td>
-                            <td><?= CURRENCY_SYMBOL ?> <?= number_format($order['total_amount'] ?? 0, 2) ?></td>
+                            <td><?= CURRENCY_SYMBOL ?> <?= number_format($order['total_amount'], 2) ?></td>
                             <td>
-                                <span class="status-<?= htmlspecialchars($order['status'] ?? 'pending') ?>">
-                                    <?= ucfirst(htmlspecialchars($order['status'] ?? 'Pending')) ?>
+                                <span class="status-<?= htmlspecialchars(strtolower($order['status'])) ?>">
+                                    <?= ucfirst(htmlspecialchars($order['status'])) ?>
                                 </span>
                             </td>
                             <td>
-                                <a href="order_details.php?id=<?= $order['id'] ?>" class="action-btn view-btn">
+                                <a href="order_details.php?id=<?= urlencode($order['id']) ?>" class="action-btn view-btn" aria-label="View order #<?= htmlspecialchars($order['id']) ?>">
                                     <i class="fas fa-eye"></i> View
                                 </a>
-                                <a href="update_order.php?id=<?= $order['id'] ?>" class="action-btn update-btn">
+                                <a href="update_order.php?id=<?= urlencode($order['id']) ?>" class="action-btn update-btn" aria-label="Update order #<?= htmlspecialchars($order['id']) ?>">
                                     <i class="fas fa-edit"></i> Update
                                 </a>
                             </td>
@@ -539,28 +566,28 @@ try {
             </table>
 
             <?php if ($total_pages > 1): ?>
-            <div class="pagination">
+            <nav class="pagination" aria-label="Pagination">
                 <?php if ($page > 1): ?>
-                    <a href="orders.php?page=<?= $page - 1 ?>">&laquo;</a>
+                    <a href="orders.php?page=<?= $page - 1 ?>" aria-label="Previous page">&laquo;</a>
                 <?php endif; ?>
 
                 <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                    <a href="orders.php?page=<?= $i ?>" <?= ($i === $page) ? 'class="active"' : '' ?>>
+                    <a href="orders.php?page=<?= $i ?>" <?= ($i === $page) ? 'class="active" aria-current="page"' : '' ?>>
                         <?= $i ?>
                     </a>
                 <?php endfor; ?>
 
                 <?php if ($page < $total_pages): ?>
-                    <a href="orders.php?page=<?= $page + 1 ?>">&raquo;</a>
+                    <a href="orders.php?page=<?= $page + 1 ?>" aria-label="Next page">&raquo;</a>
                 <?php endif; ?>
-            </div>
+            </nav>
             <?php endif; ?>
         </div>
     </main>
 
     <script>
         // Mobile menu toggle
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const menuToggle = document.createElement('button');
             menuToggle.innerHTML = '<i class="fas fa-bars"></i>';
             menuToggle.style.position = 'fixed';
@@ -575,6 +602,7 @@ try {
             menuToggle.style.display = 'none';
             menuToggle.style.zIndex = '1000';
             menuToggle.style.cursor = 'pointer';
+            menuToggle.setAttribute('aria-label', 'Toggle menu');
             document.body.appendChild(menuToggle);
 
             const sidebar = document.querySelector('.sidebar');
@@ -589,7 +617,7 @@ try {
                 }
             }
 
-            menuToggle.addEventListener('click', function() {
+            menuToggle.addEventListener('click', function () {
                 sidebar.style.display = sidebar.style.display === 'none' ? 'block' : 'none';
             });
 
@@ -598,16 +626,16 @@ try {
         });
 
         // Live search functionality
-        document.getElementById('search-input').addEventListener('input', function() {
+        document.getElementById('search-input').addEventListener('input', function () {
             const searchTerm = this.value.toLowerCase();
             const rows = document.querySelectorAll('.order-table tbody tr');
-            
+
             rows.forEach(row => {
                 if (row.classList.contains('no-orders')) return;
-                
+
                 const orderId = row.cells[0].textContent.toLowerCase();
                 const customer = row.cells[1].textContent.toLowerCase();
-                
+
                 if (orderId.includes(searchTerm) || customer.includes(searchTerm)) {
                     row.style.display = '';
                 } else {
@@ -617,19 +645,16 @@ try {
         });
 
         // Status filter functionality
-        document.getElementById('status-filter').addEventListener('change', function() {
+        document.getElementById('status-filter').addEventListener('change', function () {
             const status = this.value.toLowerCase();
             const rows = document.querySelectorAll('.order-table tbody tr');
-            
+
             rows.forEach(row => {
-                if (row.classList.contains('no-orders')) {
-                    row.style.display = 'none';
-                    return;
-                }
-                
-                const rowStatus = row.cells[4].textContent.toLowerCase().trim();
-                
-                if (!status || rowStatus === status) {
+                if (row.classList.contains('no-orders')) return;
+
+                const statusCell = row.cells[4].textContent.toLowerCase();
+
+                if (status === '' || statusCell === status) {
                     row.style.display = '';
                 } else {
                     row.style.display = 'none';
